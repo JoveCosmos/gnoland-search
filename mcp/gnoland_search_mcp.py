@@ -1,7 +1,8 @@
 #!/usr/bin/env python3
 """gno.land search as tools for AI agents (MCP, over standard input and output).
 
-One file, Python 3.10+ standard library only. It calls a running search server's open API, so the
+One file, Python 3.10+ standard library only. The search server also serves these same tools at
+/mcp over HTTP (gnosearch/server.py loads this file), so the two never differ. It calls a running search server's open API, so the
 agent can find realms, packages, code, accounts, tokens and transactions, read them, and see which
 packages are really used. Read only: nothing here signs or sends anything.
 
@@ -60,11 +61,12 @@ class ToolError(Exception):
     pass
 
 
-def api(route, **params):
-    if not BASE:
+def api(route, base=None, headers=None, **params):
+    base = base or BASE
+    if not base:
         raise ToolError("GNOLAND_SEARCH_URL is not set: point it at a gno.land search server")
-    url = f"{BASE}{route}?{urllib.parse.urlencode({k: v for k, v in params.items() if v not in (None, '')})}"
-    req = urllib.request.Request(url, headers={"User-Agent": f"gnoland-search-mcp/{VERSION}"})
+    url = f"{base}{route}?{urllib.parse.urlencode({k: v for k, v in params.items() if v not in (None, '')})}"
+    req = urllib.request.Request(url, headers={"User-Agent": f"gnoland-search-mcp/{VERSION}", **(headers or {})})
     try:
         with urllib.request.urlopen(req, timeout=20) as r:
             return json.load(r)
@@ -106,7 +108,9 @@ def results_text(rs, net):
     return "\n".join(lines)
 
 
-def call(name, args):
+def call(name, args, fetch=None):
+    """Run one tool. fetch(route, **params) reads the search API; by default over HTTP from BASE."""
+    api = fetch or globals()["api"]
     net = args.get("net") or "main"
     if net not in ("main", "test"):
         raise ToolError("net must be main or test")
@@ -150,7 +154,7 @@ def call(name, args):
     raise ToolError(f"unknown tool {name}")
 
 
-def handle(msg):
+def handle(msg, fetch=None):
     """One JSON-RPC message in, one reply out (None for notifications)."""
     mid, method = msg.get("id"), msg.get("method")
     if mid is None:
@@ -169,7 +173,7 @@ def handle(msg):
     if method == "tools/call":
         p = msg.get("params") or {}
         try:
-            text, err = call(p.get("name"), p.get("arguments") or {}), False
+            text, err = call(p.get("name"), p.get("arguments") or {}, fetch), False
         except ToolError as e:
             text, err = str(e), True
         except (KeyError, ValueError, TypeError) as e:

@@ -15,9 +15,19 @@ written on chain by anyone and is marked as data, not instructions.
 
 ## Set up
 
-Download the file, then point your agent at it, with `GNOLAND_SEARCH_URL` set to a search server.
+The simplest way: a search server answers MCP itself at `/mcp`, so the agent needs only its address.
+Gnosh (`~/.config/gnosh/mcp.json`) and most other MCP clients take this shape:
 
-Gnosh (`~/.config/gnosh/mcp.json`) and most other MCP clients take the same shape:
+```json
+{
+  "mcpServers": {
+    "gnoland-search": { "type": "http", "url": "https://<search server>/mcp" }
+  }
+}
+```
+
+Or run the tools on your own machine: download `gnoland_search_mcp.py` and point it at a search
+server with `GNOLAND_SEARCH_URL`:
 
 ```json
 {

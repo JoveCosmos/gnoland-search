@@ -40,7 +40,10 @@ by hash prefix (`store.find_tx`), shown from `store.page("tx:...")`.
   `search`, `find_package`, `read_page`, `who_imports`, `stats`. Read only. Every result starts
   with the untrusted-data notice and is capped (`MAX_TEXT`): chain text may try to instruct the
   agent. Its tools and the API routes change together (`/api/importers`, `kind=` were added for it).
-  Tested in `tests/test_mcp.py`; checked against Gnosh's own client with `gnosh mcp get`.
+  The server also answers MCP at `POST /mcp` (no sessions: one request, one answer; GET is 405), loading
+  this same file, so the two never differ. Its tools call the API on 127.0.0.1 naming the visitor, so each
+  agent has its own rate limits; a foreign `Origin` is refused (a web page may not drive an agent's tools).
+  Tested in `tests/test_mcp.py` and the smoke check; checked against Gnosh's own client by command and by URL.
 - `web/`: the search page and the API page (`api.html`, documenting the same routes as
   `server.py`: change both together). `base.css` holds the tokens both use; `theme.js` (a classic
   script in head, so no flash) applies the day/night choice. Class prefixes: `sr-` search bar,

@@ -25,6 +25,7 @@ curl -s "$B/api/search?q=g1qqqqr2u6rfydqjkm56a7s54397vfp4kmvnuwev" | grep -q '"u
 curl -s "$B/api/search?q=GNS&n=1" | grep -q '"kind": "token"' && ok "token by symbol" || bad "token by symbol"
 curl -s "$B/api/importers?u=gno.land/p/nt/avl/v0" | grep -q '"importers"' && ok "importers" || bad "importers"
 curl -s "$B/api/search?q=tree&kind=pkg" | grep -q '"kind": "pkg"' && ok "kind filter" || bad "kind filter"
+curl -s -X POST "$B/mcp" -H 'Content-Type: application/json' -d '{"jsonrpc":"2.0","id":1,"method":"tools/list"}' | grep -q '"find_package"' && ok "mcp" || bad "mcp"
 # in parallel, so the result does not depend on how fast one search is
 seq 1 60 | xargs -P 20 -I{} curl -s -o /dev/null -w '%{http_code}\n' "$B/api/search?q=r{}" | grep -q 429 && ok "rate limit" || bad "rate limit"
 exit $fail

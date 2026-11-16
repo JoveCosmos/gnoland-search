@@ -196,7 +196,8 @@ async function load(url) {
   $("reader").scrollTop = 0;
   const t0 = performance.now();
   try {
-    const r = await fetch(`/api/page?u=${encodeURIComponent(url)}&net=${net}`);
+    let extra = "";
+    const r = await fetch(`/api/page?u=${encodeURIComponent(url)}&net=${net}${extra}`);
     if (current !== url) return;
     if (r.status === 429) { $("state").textContent = "Slow down a little, then open it again"; return; }
     const d = await r.json();

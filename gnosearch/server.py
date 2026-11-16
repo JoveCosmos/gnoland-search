@@ -9,6 +9,7 @@ GET /api/importers?u=...         packages and realms that import a package, most
 The API is open (any site may call it) and documented at /api, which describes the same routes:
 change both together.
 """
+import importlib.util
 import json
 import os
 import re
@@ -18,6 +19,11 @@ import urllib.parse
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
 from . import chain, store
+
+# The MCP tools (mcp/gnoland_search_mcp.py, also a standalone download) served at /mcp too: one implementation.
+_spec = importlib.util.spec_from_file_location("gnoland_search_mcp", os.path.join(os.path.dirname(__file__), "..", "mcp", "gnoland_search_mcp.py"))
+mcp = importlib.util.module_from_spec(_spec)
+_spec.loader.exec_module(mcp)
 
 WEB = os.path.join(os.path.dirname(__file__), "..", "web")
 PORT = int(os.environ.get("GNOSEARCH_PORT", "8960"))
@@ -34,7 +40,7 @@ CSP = ("default-src 'self'; script-src 'self' https://cdnjs.cloudflare.com; styl
        "https://fonts.googleapis.com; font-src https://fonts.gstatic.com; img-src 'none'; connect-src 'self'; "
        "frame-ancestors 'none'; base-uri 'none'; form-action 'none'")
 # requests per second and burst, per visitor; crawlers getting 429 is by design
-LIMITS = {"/api/search": (8, 30), "/api/page": (1, 6), "/api/stats": (1, 5), "/api/importers": (2, 10)}
+LIMITS = {"/mcp": (4, 20), "/api/search": (8, 30), "/api/page": (1, 6), "/api/stats": (1, 5), "/api/importers": (2, 10)}
 KINDS = {"realm", "pkg", "code", "user", "token", "tx"}
 LIVE_PER_SEC = 2  # live renders from the node for everyone together; above it, pages come from the index
 
@@ -67,6 +73,7 @@ class Handler(BaseHTTPRequestHandler):
     def log_message(self, *a):
         pass
 
+
     def visitor(self):
         # a local proxy or tunnel connects from this machine and names the real visitor; trust that header only then
         ip = self.client_address[0]
@@ -87,6 +94,34 @@ class Handler(BaseHTTPRequestHandler):
             self.send_header(k, v)
         self.end_headers()
         self.wfile.write(b)
+
+    def do_POST(self):
+        """/mcp: MCP over HTTP, without sessions (one request, one answer). The tools read this server's own
+        API on this machine, naming the visitor, so each agent has the same rate limits as a person."""
+        if urllib.parse.urlsplit(self.path).path != "/mcp":
+            return self.send(404, {"error": "not found"})
+        if not visitors.take((self.visitor(), "/mcp"), *LIMITS["/mcp"]):
+            return self.send(429, {"error": "too many requests"}, extra=[("Retry-After", "2")])
+        origin = self.headers.get("Origin")
+        if origin and urllib.parse.urlsplit(origin).hostname != (self.headers.get("Host") or "").split(":")[0]:
+            return self.send(403, {"error": "origin not allowed"})  # a web page may not drive an agent's tools
+        try:
+            size = int(self.headers.get("Content-Length") or 0)
+        except ValueError:
+            size = -1
+        if not 0 < size <= 65536:
+            return self.send(413 if size > 65536 else 400, {"error": "a JSON-RPC message up to 64 KB is expected"})
+        try:
+            msg = json.loads(self.rfile.read(size))
+        except ValueError:
+            return self.send(400, {"jsonrpc": "2.0", "id": None, "error": {"code": -32700, "message": "not JSON"}})
+        who = {"CF-Connecting-IP": self.visitor()}
+        fetch = lambda route, **p: mcp.api(route, base=f"http://127.0.0.1:{PORT}", headers=who, **p)
+        msgs = msg if isinstance(msg, list) else [msg]
+        replies = [r for r in (mcp.handle(m, fetch) for m in msgs[:20] if isinstance(m, dict)) if r is not None]
+        if not replies:
+            return self.send(202, b"")  # notifications only
+        return self.send(200, replies if isinstance(msg, list) else replies[0])
 
     def do_GET(self):
         u = urllib.parse.urlsplit(self.path)
@@ -155,6 +190,9 @@ class Handler(BaseHTTPRequestHandler):
                         pass
                 return self.send(200, {"url": url, "md": md, "live": is_live, "funcs": funcs,
                                        "took_ms": round((time.perf_counter() - t0) * 1000, 1)})
+            if u.path == "/mcp":
+                return self.send(405, {"error": "POST JSON-RPC messages here; this server keeps no event stream"},
+                                 extra=[("Allow", "POST")])
             if u.path == "/api/importers":
                 path = q.get("u", "")
                 if not re.fullmatch(r"gno\.land/[rp]/[A-Za-z0-9_./\-]{1,200}", path):
