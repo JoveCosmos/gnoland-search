@@ -1,0 +1,172 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#f3f4fb" media="(prefers-color-scheme: light)">
+<meta name="theme-color" content="#05060d" media="(prefers-color-scheme: dark)">
+<title>Search gno.land</title>
+<meta name="description" content="Search everything written on gno.land.">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600&family=JetBrains+Mono:wght@400;500&display=swap">
+<link rel="stylesheet" href="/base.css">
+<script src="/theme.js"></script>
+<style>
+  /* Sections: sr- search bar (with home and day/night inside it), rs- results, rd- reader.
+     --col is the one content width: the open bar, the results and the page share both edges. */
+  html, body { margin: 0; height: 100%; overflow: hidden; background: var(--bg); color: var(--ink);
+    font: 400 var(--t-m)/1.5 "Space Grotesk", system-ui, -apple-system, "Segoe UI", sans-serif; }
+  #bg { position: fixed; inset: 0; width: 100%; height: 100%; display: block; }
+
+  /* search: a button at rest, a bar while searching, docked while reading */
+  :root { --col: min(760px, calc(100vw - 32px)); }
+  .sr-bar { --top: 22vh; position: fixed; z-index: 3; left: 50%; top: 50%; transform: translate(-50%, -50%);
+    width: 64px; height: 64px; border-radius: 32px; display: flex; align-items: center;
+    background: var(--glass); border: 1px solid var(--line);
+    backdrop-filter: blur(18px); -webkit-backdrop-filter: blur(18px);
+    box-shadow: 0 0 48px var(--glow), 0 18px 60px var(--shade);
+    transition: width .45s var(--ease), top .5s var(--ease), bottom .5s var(--ease), transform .5s var(--ease); }
+  .sr-bar::before { content: ""; position: absolute; inset: -6px; border-radius: inherit; pointer-events: none;
+    border: 1px solid var(--line); animation: sr-pulse 3.2s ease-in-out infinite; }
+  @keyframes sr-pulse { 50% { inset: -14px; opacity: 0; } }
+  .sr-go { flex: none; width: 62px; height: 62px; border: 0; background: none; color: var(--accent);
+    display: grid; place-items: center; cursor: pointer; border-radius: 31px; }
+  .sr-go svg { width: 24px; height: 24px; }
+  .sr-q { flex: 1; min-width: 0; height: 100%; border: 0; outline: 0; background: none; color: var(--ink);
+    font: inherit; font-size: var(--t-xl); padding: 0 8px 0 0; opacity: 0; pointer-events: none; transition: opacity .25s; }
+  .sr-q::placeholder { color: var(--dim); }
+  .sr-q::-webkit-search-cancel-button { display: none; }
+  /* home and day/night: icon buttons at the bar's right end, only while it is open */
+  .sr-ico { flex: none; width: 44px; height: 44px; margin-right: 6px; border: 0; border-radius: 22px; background: none;
+    color: var(--dim); cursor: pointer; display: none; place-items: center; }
+  .sr-ico + .sr-ico { margin-left: -4px; }
+  .sr-ico svg { width: 20px; height: 20px; }
+  @media (hover: hover) { .sr-ico:hover { color: var(--accent); } }
+  body.open .sr-ico { display: grid; }
+  /* the smallest phones: tighter icons and a slightly smaller box text, so "Search gno.land" fits */
+  @media (max-width: 379px) {
+    body.open .sr-go { width: 46px; }
+    .sr-ico { width: 38px; margin-right: 4px; }
+    .sr-q { font-size: var(--t-l); }
+  }
+  #theme .th-sun, :root[data-dark] #theme .th-moon { display: none; }
+  :root[data-dark] #theme .th-sun { display: block; }
+  body.open .sr-bar { width: var(--col); top: var(--top); transform: translate(-50%, 0); }
+  body.open .sr-bar::before { animation: none; opacity: 0; }
+  body.open .sr-q { opacity: 1; pointer-events: auto; }
+  body.open .sr-go { width: 56px; }
+  body.reading .sr-bar { top: 14px; }
+  @media (max-width: 700px) {
+    .sr-bar { --top: 16px; }
+    body.reading .sr-bar { top: auto; bottom: max(14px, env(safe-area-inset-bottom)); }
+  }
+  @media (max-height: 500px) { .sr-bar { --top: 12px; } }
+
+  /* results: an overlay under the bar whose count line and list exist from the first paint at
+     their final size, so nothing below the box moves while results arrive */
+  .rs-wrap { --rs-top: calc(22vh + 64px); position: fixed; z-index: 2; left: 50%; transform: translateX(-50%);
+    top: var(--rs-top); bottom: 0; width: var(--col); display: flex; flex-direction: column;
+    opacity: 0; pointer-events: none; transition: opacity .25s; }
+  @media (max-width: 700px) { .rs-wrap { --rs-top: 80px; } }
+  @media (max-height: 500px) { .rs-wrap { --rs-top: 76px; } }
+  body.open:not(.reading) .rs-wrap { opacity: 1; pointer-events: auto; }
+  .rs-count { flex: none; height: 34px; display: flex; align-items: center; justify-content: space-between; gap: 12px;
+    padding: 0 6px; font: 400 var(--t-xs)/1 var(--mono); color: var(--dim); white-space: nowrap; overflow: hidden; }
+  .rs-count span { min-width: 0; overflow: hidden; text-overflow: ellipsis; }
+  /* the network name is the switch: an inline text link the full height of the row, not a second button */
+  .rs-net { flex: none; height: 34px; padding: 0 0 0 8px; border: 0; background: none; font: inherit; color: var(--accent);
+    text-decoration: underline; text-underline-offset: 3px; cursor: pointer; }
+  @media (max-width: 379px) { .rs-blk { display: none; } }  /* the count comes first on the smallest phones */
+  .rs-net:disabled { color: var(--dim); text-decoration: none; cursor: default; }
+  .rs-list { flex: 1; min-height: 0; overflow-y: auto; overscroll-behavior: contain; margin: 0; padding: 0 0 24px;
+    list-style: none; scrollbar-width: thin; }
+  /* every card is one fixed shape: title, path, two snippet lines, meta, each clamped */
+  .rs-card { display: grid; grid-template-rows: 24px 20px 42px 20px; row-gap: 2px; height: 128px;
+    margin: 0 0 8px; padding: 10px 18px; border-radius: 16px; cursor: pointer; overflow: hidden;
+    background: var(--card); border: 1px solid transparent;
+    backdrop-filter: blur(12px); -webkit-backdrop-filter: blur(12px); transition: border-color .15s, background .15s; }
+  .rs-card.sel { border-color: var(--line); background: var(--card-on); }
+  @media (hover: hover) { .rs-card:hover { border-color: var(--line); background: var(--card-on); } }
+  .rs-t, .rs-u, .rs-m { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .rs-t { font-weight: 600; font-size: var(--t-l); line-height: 24px; }
+  .rs-u { font: 400 var(--t-xs)/20px var(--mono); color: var(--path); }
+  .rs-s { color: var(--dim); font-size: var(--t-s); line-height: 21px; display: -webkit-box; -webkit-line-clamp: 2;
+    -webkit-box-orient: vertical; overflow: hidden; overflow-wrap: anywhere; }
+  .rs-m { font: 400 var(--t-xs)/20px var(--mono); color: var(--dim); }
+  .rs-s mark { background: var(--mark); color: var(--ink); border-radius: 3px; padding: 0 2px; }
+  .rs-none { height: 128px; display: grid; place-items: center; text-align: center; color: var(--dim);
+    padding: 0 18px; overflow: hidden; overflow-wrap: anywhere; }
+
+  /* reader */
+  .rd-wrap { position: fixed; z-index: 1; inset: 0; overflow-y: auto; opacity: 0; pointer-events: none;
+    padding: 88px 16px 40px; transition: opacity .35s; background: var(--bg); }
+  @media (max-width: 700px) { .rd-wrap { padding: 20px 16px 104px; } }
+  body.reading .rd-wrap { opacity: 1; pointer-events: auto; }
+  .rd-doc { max-width: 760px; margin: 0 auto; }
+  .rd-meta { display: flex; align-items: center; min-height: 44px; margin-bottom: 14px;
+    font: 400 var(--t-xs)/1.4 var(--mono); color: var(--dim); }
+  .rd-meta > div { min-width: 0; display: flex; flex-direction: column; }
+  .rd-meta a { color: var(--path); text-decoration: none; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .rd-state { height: 17px; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
+  .rd-body { line-height: 1.65; overflow-wrap: anywhere; min-height: 60vh; }
+  .rd-body h1, .rd-body h2, .rd-body h3 { line-height: 1.25; text-wrap: balance; }
+  .rd-body a { color: var(--accent); }
+  .rd-body .rd-host { color: var(--dim); font: 400 var(--t-xs) var(--mono); }
+  .rd-body pre, .rd-body code { font-family: var(--mono); font-size: 13px; }
+  .rd-body pre { background: var(--faint); border-radius: 10px; padding: 12px; overflow-x: auto; }
+  .rd-body table { border-collapse: collapse; display: block; overflow-x: auto; max-width: 100%; }
+  .rd-body td, .rd-body th { border: 1px solid var(--faint); padding: 6px 10px; }
+  .rd-body blockquote { border-left: 2px solid var(--accent); margin: 0; padding-left: 14px; color: var(--dim); }
+  .rd-dim { color: var(--dim); }
+
+  /* the resting screen's two lines: what is indexed, and how to search or switch network */
+  .hint { position: fixed; z-index: 1; left: 16px; right: 16px; bottom: max(10px, env(safe-area-inset-bottom)); height: 56px;
+    display: flex; flex-direction: column; align-items: center; justify-content: center; text-align: center;
+    font: 400 var(--hint-size)/20px var(--mono); color: var(--dim); overflow: hidden; transition: opacity .3s;
+    /* both lines one size, scaled down on narrow phones so the whole text fits instead of being cut (2026-11-16):
+       the longest line is ~47 mono characters, about 0.6em each, inside 100vw - 32px */
+    --hint-size: clamp(9.5px, calc((100vw - 32px) / 48 / 0.6), var(--t-xs)); }
+  .hint > span { max-width: 100%; white-space: nowrap; overflow: hidden; }
+  .hint > span + span { height: 32px; display: flex; align-items: center; justify-content: center; gap: .6ch; }
+  .hint-net { height: 32px; padding: 0 2px; border: 0; background: none; font: inherit; color: var(--accent);
+    text-decoration: underline; text-underline-offset: 3px; cursor: pointer; }
+  body.open .hint { opacity: 0; pointer-events: none; }
+  @media (prefers-reduced-motion: reduce) { *, .sr-bar::before { animation: none !important; transition: none !important; } }
+</style>
+</head>
+<body>
+<canvas id="bg" aria-hidden="true"></canvas>
+
+<div class="sr-bar" role="search">
+  <button class="sr-go" id="go" aria-label="Search gno.land">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="11" cy="11" r="6.5"/><path d="M20 20l-4.2-4.2"/></svg>
+  </button>
+  <input class="sr-q" id="q" type="search" maxlength="200" placeholder="Search gno.land" autocomplete="off" spellcheck="false" enterkeyhint="search" aria-label="Search gno.land" aria-controls="results">
+  <button class="sr-ico" id="home" aria-label="Home">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 11l8-7 8 7"/><path d="M6 9.5V20h12V9.5"/></svg>
+  </button>
+  <button class="sr-ico" id="theme" aria-label="Switch day and night">
+    <svg class="th-moon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 14.5A8 8 0 1 1 9.5 4a6.5 6.5 0 0 0 10.5 10.5z"/></svg>
+    <svg class="th-sun" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M2 12h2M20 12h2M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4"/></svg>
+  </button>
+</div>
+
+<div class="rs-wrap">
+  <div class="rs-count" aria-live="polite"><span id="count"></span><button class="rs-net" id="net" hidden></button></div>
+  <ul class="rs-list" id="results" role="listbox" aria-label="Results"></ul>
+</div>
+
+<div class="rd-wrap" id="reader">
+  <article class="rd-doc">
+    <div class="rd-meta"><div><a id="src" target="_blank" rel="nofollow noopener noreferrer"></a><span class="rd-state" id="state"></span></div></div>
+    <div class="rd-body" id="body"></div>
+  </article>
+</div>
+
+<div class="hint" id="hint"><span id="hint-stats"></span><span><span id="hint-how"></span><button class="hint-net" id="hint-net" hidden></button></span></div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/marked/12.0.2/marked.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/dompurify/3.1.6/purify.min.js"></script>
+<script type="module" src="/app.js"></script>
+</body>
+</html>

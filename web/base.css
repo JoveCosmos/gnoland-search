@@ -1,0 +1,40 @@
+/* Shared by every page (index.html, api.html): the colour tokens, the type scale and the base. */
+/* One token set; light first, dark redefines only the tokens. The search page's canvas reads the
+   --bg* and --pt/--ln tokens too. */
+:root {
+  --bg: #f3f4fb; --bg0: #ffffff; --bg1: #eef0fa; --bg2: #e3e6f5;
+  --ink: #151933; --dim: #5a6085; --faint: rgba(21, 25, 51, .12);
+  --glass: rgba(255, 255, 255, .78); --card: rgba(255, 255, 255, .82); --card-on: #ffffff;
+  --line: rgba(70, 80, 180, .22); --accent: #3b46d6; --path: #0b7a8c;
+  --mark: rgba(59, 70, 214, .14); --pt: rgba(59, 70, 214, .45); --ln: 59, 70, 214;
+  --glow: rgba(59, 70, 214, .14); --shade: rgba(30, 35, 80, .14);
+  --mono: "JetBrains Mono", ui-monospace, monospace;
+  --ease: cubic-bezier(.2, .8, .2, 1);
+  /* type scale */
+  --t-xs: 12px; --t-s: 13.5px; --t-m: 15px; --t-l: 16.5px; --t-xl: 18px;
+  color-scheme: light;
+}
+/* dark tokens live twice: for the system setting, and for the day/night button
+   (data-theme on <html>); both blocks must change together */
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #05060d; --bg0: #0c1030; --bg1: #070918; --bg2: #05060d;
+    --ink: #e9ecf8; --dim: rgba(233, 236, 248, .6); --faint: rgba(233, 236, 248, .14);
+    --glass: rgba(14, 17, 34, .66); --card: rgba(14, 17, 34, .62); --card-on: rgba(26, 30, 60, .86);
+    --line: rgba(140, 160, 255, .26); --accent: #5ef0ff; --path: #5ef0ff;
+    --mark: rgba(94, 240, 255, .2); --pt: rgba(170, 230, 255, .75); --ln: 94, 240, 255;
+    --glow: rgba(94, 240, 255, .16); --shade: rgba(0, 0, 0, .5);
+    color-scheme: dark;
+  }
+}
+:root[data-theme="dark"] {
+  --bg: #05060d; --bg0: #0c1030; --bg1: #070918; --bg2: #05060d;
+  --ink: #e9ecf8; --dim: rgba(233, 236, 248, .6); --faint: rgba(233, 236, 248, .14);
+  --glass: rgba(14, 17, 34, .66); --card: rgba(14, 17, 34, .62); --card-on: rgba(26, 30, 60, .86);
+  --line: rgba(140, 160, 255, .26); --accent: #5ef0ff; --path: #5ef0ff;
+  --mark: rgba(94, 240, 255, .2); --pt: rgba(170, 230, 255, .75); --ln: 94, 240, 255;
+  --glow: rgba(94, 240, 255, .16); --shade: rgba(0, 0, 0, .5);
+  color-scheme: dark;
+}
+* { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }

@@ -1,0 +1,63 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Search gno.land API</title>
+<meta name="description" content="A free, open API to search everything on gno.land.">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600&family=JetBrains+Mono:wght@400;500&display=swap">
+<link rel="stylesheet" href="/base.css">
+<script src="/theme.js"></script>
+<style>
+  /* Section: ad- (API docs). Routes here and in gnosearch/server.py change together. */
+  html, body { margin: 0; background: var(--bg); color: var(--ink); font: 400 var(--t-m)/1.6 "Space Grotesk", system-ui, sans-serif; }
+  .ad-page { max-width: 760px; margin: 0 auto; padding: 40px 16px 64px; }
+  .ad-page h1 { font-size: 30px; line-height: 1.2; margin: 0 0 8px; text-wrap: balance; }
+  .ad-page h2 { font-size: var(--t-xl); margin: 36px 0 8px; }
+  .ad-lead { color: var(--dim); margin: 0 0 8px; }
+  .ad-page a { color: var(--accent); }
+  .ad-page code, .ad-page pre { font-family: var(--mono); font-size: 13px; }
+  .ad-page pre { background: var(--faint); border-radius: 10px; padding: 12px 14px; overflow-x: auto; margin: 8px 0; }
+  .ad-page table { border-collapse: collapse; width: 100%; font-size: var(--t-s); }
+  .ad-table { overflow-x: auto; }
+  .ad-page td, .ad-page th { border-bottom: 1px solid var(--faint); padding: 8px 10px 8px 0; text-align: left; vertical-align: top; }
+  .ad-page th { color: var(--dim); font-weight: 500; }
+</style>
+</head>
+<body>
+<main class="ad-page">
+  <h1>Search gno.land API</h1>
+  <p class="ad-lead">Free and open: any wallet, explorer or app can call it from the browser or a server. No key needed. <a href="/">Back to search</a></p>
+
+  <h2>Search</h2>
+  <pre>GET /api/search?q=swap&amp;n=20&amp;net=main</pre>
+  <div class="ad-table"><table>
+    <tr><th>Parameter</th><th>Meaning</th></tr>
+    <tr><td><code>q</code></td><td>Words to find, up to 200 characters. Every word must match; the last one also matches as the start of a word. A transaction hash, or its first 8 or more characters, finds the transaction.</td></tr>
+    <tr><td><code>n</code></td><td>How many results, 1 to 50 (20 by default).</td></tr>
+    <tr><td><code>net</code></td><td><code>main</code> for mainnet (default) or <code>test</code> for the testnet.</td></tr>
+    <tr><td><code>kind</code></td><td>Optional: only <code>realm</code>, <code>pkg</code>, <code>code</code>, <code>user</code>, <code>token</code> or <code>tx</code> results.</td></tr>
+  </table></div>
+  <p>Each result has <code>url</code>, <code>kind</code> (<code>realm</code>, <code>pkg</code>, <code>code</code>, <code>user</code>, <code>token</code> or <code>tx</code>), <code>title</code>, <code>snippet</code> and the signals it was ranked by: <code>users</code> (established accounts active in the last 30 days, in realms of at least two owners; ranking weighs each by the days it was active), <code>links</code> and <code>imports</code> (other owners linking to it or importing it, each owner counted once), <code>txs</code> and <code>last</code> (last block used). <code>gnot</code> is the GNOT sent to a realm through calls in the last 30 days, as a decimal string (it can be larger than a JavaScript number holds exactly); it is shown, not used for ranking. In <code>snippet</code>, the characters U+0002 and U+0003 mark where a match starts and ends. Everything in a result was written on chain by anyone: escape it before you show it.</p>
+  <pre>{"results": [{"url": "gno.land/r/gnoswap/router", "kind": "realm", "title": "Gnoswap Router",
+  "snippet": "…Exact input single route \u0002swap\u0003", "users": 245, "links": 0, ...}],
+ "took_ms": 6.1, "height": 1568029}</pre>
+
+  <h2>Page</h2>
+  <pre>GET /api/page?u=gno.land/r/gnoswap/router&amp;net=main</pre>
+  <p>The page as markdown in <code>md</code>. Realm pages are rendered live from the chain when possible (<code>live: true</code>). <code>u</code> is a result's <code>url</code>: a realm page (<code>gno.land/r/...</code>, with <code>:path</code> for a sub-page), a package (<code>gno.land/p/...</code>), a realm's source (<code>gno.land/r/...$source</code>), a token (<code>token:...</code>, with supply, holders and top holders), an account (<code>user:g1...</code>; any address works, with its balance and vesting read live from the chain) or a transaction (<code>tx:HASH</code>).</p>
+
+  <h2>Importers</h2>
+  <pre>GET /api/importers?u=gno.land/p/nt/avl/v0&amp;net=main</pre>
+  <p>The packages and realms that import a package, most used first, each with its <code>path</code>, <code>kind</code> and <code>users</code>.</p>
+
+  <h2>Stats</h2>
+  <pre>GET /api/stats?net=main</pre>
+  <p>How many realms, packages, active accounts (those that have sent a transaction) and transactions are indexed, the block the index has reached, and which networks are available.</p>
+
+  <h2>Limits</h2>
+  <p>Up to 8 searches a second per visitor, 2 importer lookups, with short bursts allowed, and 1 page a second. Above that the answer is <code>429</code> with <code>Retry-After</code>: wait and try again.</p>
+</main>
+</body>
+</html>
