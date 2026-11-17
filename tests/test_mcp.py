@@ -55,6 +55,9 @@ class Tools(unittest.TestCase):
         self.assertIn("[cut at", text)
         self.assertLess(len(text), m.MAX_TEXT + 500)
 
+    def test_counts_read_naturally(self):
+        self.assertEqual(m.signals({"kind": "pkg", "imports": 1, "users": 2}), "pkg, 2 users this month, 1 importer")
+
     def test_errors_are_tool_errors(self):
         r = self.call("who_imports", path="p/a/x")
         self.assertTrue(r["isError"])

@@ -88,9 +88,10 @@ def plain(s, n):
 
 def signals(r):
     bits = [r.get("kind", "")]
-    for key, label in (("users", "users this month"), ("imports", "importers"), ("links", "linking realms")):
+    for key, one, many in (("users", "user this month", "users this month"), ("imports", "importer", "importers"),
+                           ("links", "linking realm", "linking realms")):
         if r.get(key):
-            bits.append(f"{r[key]} {label}")
+            bits.append(f"{r[key]} {one if r[key] == 1 else many}")
     if r.get("gnot"):
         bits.append(f"{r['gnot']} GNOT in this month")
     return ", ".join(b for b in bits if b)

@@ -44,6 +44,8 @@ class Extract(unittest.TestCase):
     def test_text_and_title(self):
         md = "# Hello *World*\n\n![x](https://e/x.png) [link words](https://e) `code`\n```go\nsecret\n```"
         self.assertEqual(crawl.title_of(md, "gno.land/r/a"), "Hello World")
+        self.assertEqual(crawl.title_of("# memba_arcade_leaderboard_v1", "x"), "memba_arcade_leaderboard_v1")
+        self.assertEqual(crawl.title_of("# _Big_ **news** [here](/r/x)", "x"), "Big news here")
         t = crawl.text_of(md)
         self.assertIn("link words", t)
         self.assertNotIn("secret", t)

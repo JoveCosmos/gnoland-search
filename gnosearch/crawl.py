@@ -44,7 +44,8 @@ def text_of(md):
 def title_of(md, url):
     m = re.search(r"^\s{0,3}#{1,3}\s+(.+)$", md, flags=re.M)
     if m:
-        return re.sub(r"[*_`\[\]]|\(.*?\)", "", m.group(1)).strip()[:160]
+        # strip emphasis and link marks, but keep an underscore inside a name (memba_arcade_leaderboard_v1)
+        return re.sub(r"\*\*?|`|\[|\]|\(.*?\)|(?<!\w)_+|_+(?!\w)", "", m.group(1)).strip()[:160]
     return url.replace("gno.land/r/", "")
 
 
