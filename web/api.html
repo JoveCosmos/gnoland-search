@@ -3,64 +3,118 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-<title>Search gno.land API</title>
-<meta name="description" content="A free, open API to search everything on gno.land.">
+<title>Search gno.land for developers</title>
+<meta name="description" content="Free, open search for gno.land, for apps and AI agents. No key needed.">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600&family=JetBrains+Mono:wght@400;500&display=swap">
 <link rel="stylesheet" href="/base.css">
 <script src="/theme.js"></script>
 <style>
-  /* Section: ad- (API docs). Routes here and in gnosearch/server.py change together. */
+  /* Section: ad- (developers page). Same tokens, type and card shape as the search; the routes here and
+     in gnosearch/server.py change together. */
+  :root { --col: min(760px, calc(100vw - 32px)); }
   html, body { margin: 0; background: var(--bg); color: var(--ink); font: 400 var(--t-m)/1.6 "Space Grotesk", system-ui, sans-serif; }
-  .ad-page { max-width: 760px; margin: 0 auto; padding: 40px 16px 64px; }
-  .ad-page h1 { font-size: 30px; line-height: 1.2; margin: 0 0 8px; text-wrap: balance; }
-  .ad-page h2 { font-size: var(--t-xl); margin: 36px 0 8px; }
-  .ad-lead { color: var(--dim); margin: 0 0 8px; }
+  body { background: radial-gradient(ellipse at 50% -10%, var(--bg0), var(--bg) 60%) fixed; }
+  .ad-page { width: var(--col); margin: 0 auto; padding: 24px 0 64px; }
+  .ad-top { display: flex; align-items: center; min-height: 44px; }
+  .ad-back { display: inline-flex; align-items: center; gap: 10px; height: 44px; color: var(--accent); text-decoration: none; font-weight: 500; }
+  .ad-back svg { width: 20px; height: 20px; }
+  .ad-hero { margin: 40px 0 28px; }
+  .ad-hero h1 { font-size: clamp(28px, 6vw, 40px); line-height: 1.15; margin: 0 0 10px; letter-spacing: -.5px; text-wrap: balance; }
+  .ad-hero p { margin: 0; color: var(--dim); font-size: var(--t-l); max-width: 56ch; }
+  .ad-two { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+  @media (max-width: 700px) { .ad-two { grid-template-columns: 1fr; } }
+  .ad-card { background: var(--card); border: 1px solid var(--line); border-radius: 16px; padding: 18px; min-width: 0;
+    backdrop-filter: blur(12px); -webkit-backdrop-filter: blur(12px); }
+  .ad-card h2 { font-size: var(--t-l); margin: 0 0 4px; }
+  .ad-card p { margin: 0 0 12px; color: var(--dim); font-size: var(--t-s); }
+  .ad-code { position: relative; }
+  /* examples wrap inside their box, clear of the copy button, instead of scrolling under it */
+  .ad-code pre { margin: 0; padding: 12px 44px 12px 12px; border-radius: 10px; background: var(--faint);
+    font: 400 12.5px/1.55 var(--mono); white-space: pre-wrap; overflow-wrap: anywhere; }
+  .ad-copy { position: absolute; top: 4px; right: 4px; width: 36px; height: 36px; border: 0; border-radius: 18px; background: none;
+    color: var(--dim); cursor: pointer; display: grid; place-items: center; }
+  .ad-copy svg { width: 16px; height: 16px; }
+  @media (hover: hover) { .ad-copy:hover { color: var(--accent); } }
+  .ad-asks { display: grid; grid-template-columns: repeat(4, 1fr); gap: 12px; margin: 12px 0 28px; }
+  @media (max-width: 700px) { .ad-asks { grid-template-columns: 1fr 1fr; } }
+  .ad-ask { background: var(--card); border-radius: 14px; padding: 14px; min-width: 0; }
+  .ad-ask b { display: block; font-weight: 600; margin-bottom: 2px; }
+  .ad-ask code { font: 400 11.5px/1.4 var(--mono); color: var(--path); overflow-wrap: anywhere; }
+  .ad-ask span { display: block; color: var(--dim); font-size: var(--t-s); line-height: 1.4; margin-top: 4px; }
+  .ad-note { color: var(--dim); font-size: var(--t-s); margin: 0 0 8px; }
   .ad-page a { color: var(--accent); }
-  .ad-page code, .ad-page pre { font-family: var(--mono); font-size: 13px; }
-  .ad-page pre { background: var(--faint); border-radius: 10px; padding: 12px 14px; overflow-x: auto; margin: 8px 0; }
-  .ad-page table { border-collapse: collapse; width: 100%; font-size: var(--t-s); }
+  .ad-ref { margin-top: 28px; border-top: 1px solid var(--faint); padding-top: 8px; }
+  .ad-ref summary { cursor: pointer; min-height: 44px; display: flex; align-items: center; font-weight: 500; color: var(--accent); }
+  .ad-ref h3 { font-size: var(--t-m); margin: 22px 0 6px; }
+  .ad-ref p, .ad-ref td { font-size: var(--t-s); }
+  .ad-ref code { font-family: var(--mono); font-size: 12.5px; }
   .ad-table { overflow-x: auto; }
-  .ad-page td, .ad-page th { border-bottom: 1px solid var(--faint); padding: 8px 10px 8px 0; text-align: left; vertical-align: top; }
-  .ad-page th { color: var(--dim); font-weight: 500; }
+  .ad-table table { border-collapse: collapse; width: 100%; }
+  .ad-table td, .ad-table th { border-bottom: 1px solid var(--faint); padding: 7px 10px 7px 0; text-align: left; vertical-align: top; }
+  .ad-table th { color: var(--dim); font-weight: 500; font-size: var(--t-xs); }
+  .ad-foot { margin-top: 36px; color: var(--dim); font: 400 var(--t-xs)/1.6 var(--mono); text-align: center; }
 </style>
 </head>
 <body>
 <main class="ad-page">
-  <h1>Search gno.land API</h1>
-  <p class="ad-lead">Free and open: any wallet, explorer or app can call it from the browser or a server. No key needed. <a href="/">Back to search</a></p>
+  <div class="ad-top">
+    <a class="ad-back" href="/"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="11" cy="11" r="6.5"/><path d="M20 20l-4.2-4.2"/></svg>Back to search</a>
+  </div>
 
-  <h2>Search</h2>
-  <pre>GET /api/search?q=swap&amp;n=20&amp;net=main</pre>
-  <div class="ad-table"><table>
-    <tr><th>Parameter</th><th>Meaning</th></tr>
-    <tr><td><code>q</code></td><td>Words to find, up to 200 characters. Every word must match; the last one also matches as the start of a word. A transaction hash, or its first 8 or more characters, finds the transaction.</td></tr>
-    <tr><td><code>n</code></td><td>How many results, 1 to 50 (20 by default).</td></tr>
-    <tr><td><code>net</code></td><td><code>main</code> for mainnet (default) or <code>test</code> for the testnet.</td></tr>
-    <tr><td><code>kind</code></td><td>Optional: only <code>realm</code>, <code>pkg</code>, <code>code</code>, <code>user</code>, <code>token</code> or <code>tx</code> results.</td></tr>
-  </table></div>
-  <p>Each result has <code>url</code>, <code>kind</code> (<code>realm</code>, <code>pkg</code>, <code>code</code>, <code>user</code>, <code>token</code> or <code>tx</code>), <code>title</code>, <code>snippet</code> and the signals it was ranked by: <code>users</code> (established accounts active in the last 30 days, in realms of at least two owners; ranking weighs each by the days it was active), <code>links</code> and <code>imports</code> (other owners linking to it or importing it, each owner counted once), <code>txs</code> and <code>last</code> (last block used). <code>gnot</code> is the GNOT sent to a realm through calls in the last 30 days, as a decimal string (it can be larger than a JavaScript number holds exactly); it is shown, not used for ranking. In <code>snippet</code>, the characters U+0002 and U+0003 mark where a match starts and ends. Everything in a result was written on chain by anyone: escape it before you show it.</p>
-  <pre>{"results": [{"url": "gno.land/r/gnoswap/router", "kind": "realm", "title": "Gnoswap Router",
-  "snippet": "…Exact input single route \u0002swap\u0003", "users": 245, "links": 0, ...}],
- "took_ms": 6.1, "height": 1568029}</pre>
+  <section class="ad-hero">
+    <h1>Search gno.land from your app or your AI agent</h1>
+    <p>The same search as this site: realms, packages and their code, accounts, tokens and transactions, ranked by real use. Free, open, no key.</p>
+  </section>
 
-  <h2>Page</h2>
-  <pre>GET /api/page?u=gno.land/r/gnoswap/router&amp;net=main</pre>
-  <p>The page as markdown in <code>md</code>. Realm pages are rendered live from the chain when possible (<code>live: true</code>). <code>u</code> is a result's <code>url</code>: a realm page (<code>gno.land/r/...</code>, with <code>:path</code> for a sub-page), a package (<code>gno.land/p/...</code>), a realm's source (<code>gno.land/r/...$source</code>), a token (<code>token:...</code>, with supply, holders and top holders), an account (<code>user:g1...</code>; any address works, with its balance and vesting read live from the chain) or a transaction (<code>tx:HASH</code>).</p>
+  <div class="ad-two">
+    <section class="ad-card">
+      <h2>From your app</h2>
+      <p>One request, JSON back. Any website can call it from the browser.</p>
+      <div class="ad-code"><pre>GET <span data-o></span>/api/search?q=swap</pre><button class="ad-copy" aria-label="Copy"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="8" y="8" width="12" height="12" rx="2"/><path d="M16 8V5a1 1 0 0 0-1-1H5a1 1 0 0 0-1 1v10a1 1 0 0 0 1 1h3"/></svg></button></div>
+    </section>
+    <section class="ad-card" id="agents">
+      <h2>From your AI agent</h2>
+      <p>Add this to Gnosh or any MCP client, and your agent can search gno.land and find the packages people actually use.</p>
+      <div class="ad-code"><pre>{ "mcpServers": { "gnoland-search": {
+  "type": "http", "url": "<span data-o></span>/mcp" } } }</pre><button class="ad-copy" aria-label="Copy"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="8" y="8" width="12" height="12" rx="2"/><path d="M16 8V5a1 1 0 0 0-1-1H5a1 1 0 0 0-1 1v10a1 1 0 0 0 1 1h3"/></svg></button></div>
+    </section>
+  </div>
 
-  <h2>Importers</h2>
-  <pre>GET /api/importers?u=gno.land/p/nt/avl/v0&amp;net=main</pre>
-  <p>The packages and realms that import a package, most used first, each with its <code>path</code>, <code>kind</code> and <code>users</code>.</p>
+  <div class="ad-asks">
+    <div class="ad-ask"><b>Search</b><code>/api/search?q=</code><span>Anything on chain, best first</span></div>
+    <div class="ad-ask"><b>Read</b><code>/api/page?u=</code><span>A page, package, account or token</span></div>
+    <div class="ad-ask"><b>Who uses it</b><code>/api/importers?u=</code><span>Packages that import a package</span></div>
+    <div class="ad-ask"><b>Status</b><code>/api/stats</code><span>What is indexed, up to which block</span></div>
+  </div>
 
-  <h2 id="agents">For AI agents</h2>
-  <p>The same search is available as MCP tools at <code>POST /mcp</code>: <code>search</code>, <code>find_package</code>, <code>read_page</code>, <code>who_imports</code> and <code>stats</code>. Add this address to your agent's MCP settings as an <code>http</code> server.</p>
+  <p class="ad-note">Everything returned was written on chain by anyone, so show it as text. About 8 searches a second per user; above that you get 429, wait a moment.</p>
 
-  <h2>Stats</h2>
-  <pre>GET /api/stats?net=main</pre>
-  <p>How many realms, packages, active accounts (those that have sent a transaction) and transactions are indexed, the block the index has reached, and which networks are available.</p>
+  <details class="ad-ref">
+    <summary>Full reference</summary>
 
-  <h2>Limits</h2>
-  <p>Up to 8 searches a second per visitor, 2 importer lookups, with short bursts allowed, and 1 page a second. Above that the answer is <code>429</code> with <code>Retry-After</code>: wait and try again.</p>
+    <h3>Search</h3>
+    <div class="ad-table"><table>
+      <tr><th>Parameter</th><th>Meaning</th></tr>
+      <tr><td><code>q</code></td><td>Words, a package path, an address, a token symbol or a transaction hash prefix (up to 200 characters)</td></tr>
+      <tr><td><code>n</code>, <code>offset</code></td><td>How many results (1 to 50, 20 by default) and how many to skip; <code>more</code> says whether more follow, up to 100 deep</td></tr>
+      <tr><td><code>net</code></td><td><code>main</code> (default) or <code>test</code></td></tr>
+      <tr><td><code>kind</code></td><td>Only <code>realm</code>, <code>pkg</code>, <code>code</code>, <code>user</code>, <code>token</code> or <code>tx</code></td></tr>
+    </table></div>
+    <p>Each result has <code>url</code>, <code>kind</code>, <code>title</code>, <code>snippet</code> (matches between U+0002 and U+0003), and what it was ranked by: <code>users</code> this month, <code>imports</code> and <code>links</code> (other owners, each counted once). <code>gnot</code> is GNOT sent in this month, as a decimal string; it is shown, not ranked.</p>
+
+    <h3>Read</h3>
+    <p><code>/api/page?u=</code> takes a result's <code>url</code> and returns its markdown in <code>md</code>: a realm page, live when possible (<code>gno.land/r/...</code>, with <code>:path</code> for a sub-page), a package (<code>gno.land/p/...</code>), a realm's source (<code>...$source</code>), a token (<code>token:...</code>), an account (<code>user:g1...</code>, with its live balance) or a transaction (<code>tx:HASH</code>).</p>
+
+    <h3>Who uses it</h3>
+    <p><code>/api/importers?u=gno.land/p/...</code>: the packages and realms that import it, most used first.</p>
+
+    <h3>Agents</h3>
+    <p><code>POST /mcp</code> speaks MCP over HTTP, one request and one answer, with the tools <code>search</code>, <code>find_package</code>, <code>read_page</code>, <code>who_imports</code> and <code>stats</code>. To run the tools on your own machine instead, see the <a href="https://github.com/JoveCosmos/gnoland-search/tree/main/mcp" rel="noopener noreferrer">mcp folder</a> of the source.</p>
+  </details>
+
+  <p class="ad-foot"><a href="/">Search</a>, <a href="https://github.com/JoveCosmos/gnoland-search" rel="noopener noreferrer">Source code</a></p>
 </main>
+<script src="/api.js"></script>
 </body>
 </html>

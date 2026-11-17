@@ -180,6 +180,32 @@ class Tokens(unittest.TestCase):
         self.assertEqual(store.search("gnoswap")["results"][0]["url"], "token:" + t["token"])  # the exact name too
 
 
+class Paging(unittest.TestCase):
+    @classmethod
+    def setUpClass(cls):
+        for i in range(60):  # 60 owners, so the per-realm and per-namespace caps do not thin the list
+            r = f"gno.land/r/owner{i:02d}/pager"
+            store.put_realm(r, [(r, f"pager {i}", "pagerword " * (1 + i % 7), "")], 1, 1)
+
+    def test_pages_join_without_gaps_or_repeats(self):
+        whole = [x["url"] for x in store.search("pagerword", 60)["results"]]
+        paged = []
+        for off in (0, 20, 40):
+            r = store.search("pagerword", 20, offset=off)
+            paged += [x["url"] for x in r["results"]]
+        self.assertEqual(paged, whole)
+        self.assertEqual(len(set(paged)), 60)
+
+    def test_more_flag(self):
+        self.assertTrue(store.search("pagerword", 20)["more"])
+        self.assertFalse(store.search("pagerword", 20, offset=40)["more"])  # exactly 60 matches
+
+    def test_depth_is_capped(self):
+        r = store.search("pagerword", 50, offset=store.MAX_RESULTS + 50)
+        self.assertLessEqual(len(r["results"]), 1)
+        self.assertFalse(r["more"])
+
+
 class ExactPath(unittest.TestCase):
     @classmethod
     def setUpClass(cls):

@@ -30,7 +30,8 @@ PORT = int(os.environ.get("GNOSEARCH_PORT", "8960"))
 BIND = os.environ.get("GNOSEARCH_BIND", "127.0.0.1")
 STATIC = {"/": ("index.html", "text/html; charset=utf-8"), "/app.js": ("app.js", "text/javascript; charset=utf-8"),
           "/robots.txt": ("robots.txt", "text/plain; charset=utf-8"), "/api": ("api.html", "text/html; charset=utf-8"),
-          "/base.css": ("base.css", "text/css; charset=utf-8"), "/theme.js": ("theme.js", "text/javascript; charset=utf-8")}
+          "/base.css": ("base.css", "text/css; charset=utf-8"), "/theme.js": ("theme.js", "text/javascript; charset=utf-8"),
+          "/api.js": ("api.js", "text/javascript; charset=utf-8")}
 LIVE_URL = re.compile(r"^gno\.land/r/[A-Za-z0-9_./\-]{1,200}(:[^\s]{0,500})?$")   # rendered from the node
 INDEX_URL = re.compile(r"^(gno\.land/[rp]/[A-Za-z0-9_./\-]{1,200}(\$source)?|user:g1[0-9a-z]{38}|tx:[0-9A-F]{64}|token:gno\.land/r/[A-Za-z0-9_./\-]{1,250})$")
 NODES = {"main": chain.NODE, "test": os.environ.get("GNOSEARCH_NODE_TEST", "")}
@@ -137,13 +138,17 @@ class Handler(BaseHTTPRequestHandler):
                     n = max(1, min(int(q.get("n", 20)), 50))
                 except ValueError:
                     n = 20
+                try:
+                    offset = max(0, min(int(q.get("offset", 0)), store.MAX_RESULTS - 1))
+                except ValueError:
+                    offset = 0
                 term = q.get("q", "")[:200]
                 kind = q.get("kind") or None
                 if kind and kind not in KINDS:
                     return self.send(400, {"error": "unknown kind"})
-                r = store.search(term, n, net, kind)
+                r = store.search(term, n, net, kind, offset)
                 addr = term.strip()
-                if store.ADDR.match(addr) and not any(x["url"] == "user:" + addr for x in r["results"]):
+                if offset == 0 and store.ADDR.match(addr) and not any(x["url"] == "user:" + addr for x in r["results"]):
                     # any address is findable, even one we never indexed: most exist only from genesis
                     r["results"].insert(0, {"url": "user:" + addr, "realm": "user:" + addr, "kind": "user",
                                             "title": f"{addr[:10]}…{addr[-4:]}", "snippet": "No transactions yet. Open it to see its balance.",

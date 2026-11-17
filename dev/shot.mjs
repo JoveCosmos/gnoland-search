@@ -67,6 +67,16 @@ for (const scheme of ["dark", "light"]) for (const [name, w, h, mobile] of sizes
   const redges = await ev(`(() => { const b = document.querySelector(".sr-bar").getBoundingClientRect(), r = document.querySelector(".rs-wrap").getBoundingClientRect();
     return Math.abs(b.left - r.left) < 1.5 && Math.abs(b.right - r.right) < 1.5 ? "" : "misaligned"; })()`);
   if (redges) { moved++; console.log("BAR NOT ALIGNED WITH RESULTS", tag); }
+  // "More results" adds 20 below; the bar, count line and the cards already shown must not move
+  await typeIn("token"); await sleep(700);
+  const before = await ev(`JSON.stringify([document.querySelectorAll(".rs-card").length, document.querySelector(".rs-card")?.getBoundingClientRect().top, document.querySelector(".sr-bar").getBoundingClientRect().top])`);
+  await ev(`(() => { const b = document.querySelector(".rs-more-btn"); b?.scrollIntoView(); b?.click(); })()`); await sleep(900);
+  await ev(`document.getElementById("results").scrollTop = 0`); await sleep(100);
+  const after = await ev(`JSON.stringify([document.querySelectorAll(".rs-card").length, document.querySelector(".rs-card")?.getBoundingClientRect().top, document.querySelector(".sr-bar").getBoundingClientRect().top])`);
+  const [n0, c0, b0] = JSON.parse(before), [n1, c1, b1] = JSON.parse(after);
+  if (!(n1 > n0 && c0 === c1 && b0 === b1)) { moved++; console.log("MORE RESULTS WRONG", tag, before, after); }
+  await ev(`(() => { const b = document.querySelector(".rs-more-btn"); b?.scrollIntoView(); })()`); await sleep(200);
+  await shot(`${tag}-3b-more`);
   await typeIn("swap <img src=x onerror=alert(1)> zzqq"); await sleep(600);
   const r3 = await rects(); await shot(`${tag}-4-none`);
   const wide = await ev("document.documentElement.scrollWidth > innerWidth");
@@ -104,6 +114,11 @@ for (const scheme of ["dark", "light"]) for (const [name, w, h, mobile] of sizes
   await ev(`document.getElementById("go").click()`); await sleep(300); await typeIn("board"); await sleep(700);
   await shot(`${tag}-11-testnet-results`);
   await ev(`localStorage.removeItem("net")`);
+  // the developers page: same look, nothing wider than the screen, examples filled with this address
+  await cdp("Page.navigate", { url: URL0 + "api" }); await sleep(900);
+  await shot(`${tag}-12-api`);
+  const apiBad = await ev(`document.documentElement.scrollWidth > innerWidth + 1 ? "horizontal scroll" : [...document.querySelectorAll("[data-o]")].some(s => !s.textContent) ? "address not filled" : ""`);
+  if (apiBad) { moved++; console.log("API PAGE", tag, apiBad); }
   const cards = await ev(`JSON.stringify([...new Set([...document.querySelectorAll(".rs-card")].map(c => c.offsetHeight))])`);
   console.log("shots", tag, "card heights", cards);
 }

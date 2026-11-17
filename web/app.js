@@ -3,7 +3,7 @@
 // text nodes (results) or through DOMPurify (pages); it is never concatenated into HTML.
 const $ = id => document.getElementById(id);
 const body = document.body, q = $("q"), results = $("results"), count = $("count");
-let sel = -1, items = [], ctl = null, current = "", height = 0;
+let sel = -1, items = [], ctl = null, current = "", height = 0, more = false, searched = "", took = 0;
 // mainnet or testnet: one index each; the choice is remembered on this device
 const NETS = { main: { name: "Mainnet", web: "https://gno.land" }, test: { name: "Testnet", web: "https://onyx.gno.land" } };
 let net = "main", nets = ["main"];
@@ -111,10 +111,9 @@ async function search() {
     const d = await r.json();
     height = d.height || height;
     showNet();
-    items = d.results; sel = items.length ? 0 : -1;
-    count.textContent = items.length
-      ? `${items.length} result${items.length > 1 ? "s" : ""} in ${Math.round(performance.now() - t0)} ms`
-      : `No realms match "${cut(term, 40)}"`;
+    items = d.results; sel = items.length ? 0 : -1; more = !!d.more; searched = term;
+    took = Math.round(performance.now() - t0);
+    showCount(term);
     draw();
   } catch (e) { if (e.name !== "AbortError") count.textContent = "Search is offline, try again soon"; }
 }
@@ -148,15 +147,41 @@ function webUrl(u) {
   if (u.startsWith("token:")) return w + short(u.slice(6).split(".").slice(0, -2).join("."));  // id = realm.SYMBOL.serial
   return w + short(u);
 }
+function showCount(term) {
+  count.textContent = items.length
+    ? `${items.length} result${items.length > 1 ? "s" : ""} in ${took} ms`
+    : `No realms match "${cut(term, 40)}"`;
+}
+function card(it, i) {
+  const li = el("li", "rs-card" + (i === sel ? " sel" : ""));
+  li.setAttribute("role", "option"); li.setAttribute("aria-selected", i === sel); li.dataset.i = i;
+  li.append(el("div", "rs-t", cut(it.title || label(it.url), 160)), el("div", "rs-u", cut(label(it.url), 300)),
+    snippet(it.snippet), el("div", "rs-m", meta(it)));
+  return li;
+}
+// "More results": a text link after the last card, there only when more exist; the next 20 are
+// added below what is already shown, so nothing above moves (2026-11-17)
+function moreRow() {
+  const li = el("li", "rs-more"), b = el("button", "rs-more-btn", "More results");
+  b.onclick = loadMore; li.append(b); return li;
+}
 function draw() {
   if (!items.length) { results.replaceChildren(); return; }
-  results.replaceChildren(...items.map((it, i) => {
-    const li = el("li", "rs-card" + (i === sel ? " sel" : ""));
-    li.setAttribute("role", "option"); li.setAttribute("aria-selected", i === sel); li.dataset.i = i;
-    li.append(el("div", "rs-t", cut(it.title || label(it.url), 160)), el("div", "rs-u", cut(label(it.url), 300)),
-      snippet(it.snippet), el("div", "rs-m", meta(it)));
-    return li;
-  }));
+  results.replaceChildren(...items.map(card), ...(more ? [moreRow()] : []));
+}
+async function loadMore() {
+  const b = results.querySelector(".rs-more-btn"), term = searched;
+  if (!b || b.disabled) return;
+  b.disabled = true; b.textContent = "Loading";
+  try {
+    const r = await fetch(`/api/search?q=${encodeURIComponent(term)}&net=${net}&offset=${items.length}`);
+    if (term !== searched) return;
+    if (r.status === 429) { b.disabled = false; b.textContent = "Slow down a little, then tap again"; return; }
+    const d = await r.json(), from = items.length;
+    items = items.concat(d.results); more = !!d.more;
+    b.parentElement.replaceWith(...d.results.map((it, i) => card(it, from + i)), ...(more ? [moreRow()] : []));
+    showCount(term);
+  } catch { b.disabled = false; b.textContent = "More results"; }
 }
 function mark() {
   [...results.children].forEach((li, i) => { li.classList.toggle("sel", i === sel); li.setAttribute("aria-selected", i === sel); });

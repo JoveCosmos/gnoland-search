@@ -44,8 +44,9 @@ by hash prefix (`store.find_tx`), shown from `store.page("tx:...")`.
   this same file, so the two never differ. Its tools call the API on 127.0.0.1 naming the visitor, so each
   agent has its own rate limits; a foreign `Origin` is refused (a web page may not drive an agent's tools).
   Tested in `tests/test_mcp.py` and the smoke check; checked against Gnosh's own client by command and by URL.
-- `web/`: the search page and the API page (`api.html`, documenting the same routes as
-  `server.py`: change both together). `base.css` holds the tokens both use; `theme.js` (a classic
+- `web/`: the search page and the developers page (`api.html`: two copy-ready examples, for apps and
+  for agents, filled with the site's own address by `api.js` so the repository names none, then a folded
+  full reference; it documents the same routes as `server.py`: change both together). `base.css` holds the tokens both use; `theme.js` (a classic
   script in head, so no flash) applies the day/night choice. Class prefixes: `sr-` search bar,
   `rs-` results, `rd-` reader, `th-` day/night button, `hint` resting lines, `ad-` API page. Colours are tokens on `:root`; the dark set is written twice,
   under `prefers-color-scheme` and under `[data-theme="dark"]` (the button's choice, kept in
@@ -120,6 +121,9 @@ rebuildable from the indexer plus a node (`crawl full`).
   not rendered live, `store.page` and `server.INDEX_URL`.
 - Packages rank by distinct importers, so one package importing another a hundred times is one
   vote; source is also only counted for paths the node lists.
+- Paging (2026-11-17): `store.search(..., offset)` returns a slice of one ranking (`_ranked`) and
+  `more`; pages join without gaps or repeats because ranking and caps are deterministic and applied in
+  order, at most `MAX_RESULTS` (100) deep. The app's "More results" link appends the next 20 below.
 - The resting screen has three lines: what is indexed, the network switch, and links to the API page, its
   agent (MCP) section and the source repository (2026-11-17).
 - The count line is empty when the box is empty (2026-11-15); the network and block show

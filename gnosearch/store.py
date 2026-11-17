@@ -20,6 +20,7 @@ HI0, HI1 = "\x02", "\x03"  # highlight markers in snippets; the app turns them i
 TITLE_MAX, BODY_MAX, MD_MAX = 160, 50_000, 200_000
 WORDS_MAX, WORD_MAX, PREFIX_MIN = 8, 40, 2   # query cost limits; prefix='2 3' below serves PREFIX_MIN
 PER_REALM, PER_NS = 3, 5                     # results one entry, and one namespace, may hold
+MAX_RESULTS = 100                            # how deep "More results" may page (offset + n)
 KIND_WEIGHT = {"realm": 1.0, "pkg": 1.0, "code": 0.6, "user": 0.9, "token": 1.0}
 ADDR = re.compile(r"^g1[02-9ac-hj-np-z]{38}$")  # a gno.land address (bech32 characters)
 HASH = re.compile(r"^[0-9A-Fa-f]{8,64}$")    # a transaction hash, or the start of one
@@ -335,17 +336,26 @@ def importers(dst, net="main", n=50):
                               order by coalesce(r.uweight,0) desc, i.src limit ?""", (dst, n)).fetchall()
 
 
-def search(q, n=20, net="main", kind=None):
-    if kind:  # one kind only (agents asking for packages): rank as usual, then keep that kind
-        r = search(q, 200, net)
-        r["results"] = [x for x in r["results"] if x["kind"] == kind][:n]
-        return r
+def search(q, n=20, net="main", kind=None, offset=0):
+    """Ranked results offset..offset+n (up to MAX_RESULTS deep), and whether more follow."""
     t0 = time.perf_counter()
+    offset = max(0, min(int(offset), MAX_RESULTS - 1))
+    if kind:  # one kind only (agents asking for packages): rank as usual, then keep that kind
+        ranked = [x for x in _ranked(q, 200, net) if x["kind"] == kind]
+    else:
+        ranked = _ranked(q, min(offset + n + 1, MAX_RESULTS + 1), net)
+    end = min(offset + n, MAX_RESULTS)
+    return {"results": ranked[offset:end], "more": len(ranked) > end and end < MAX_RESULTS,
+            "took_ms": round((time.perf_counter() - t0) * 1000, 1)}
+
+
+def _ranked(q, n, net):
+    """The first n results for q, best first: transaction, exact path and token matches, then text."""
     out = find_tx(q, net) + find_path(q, net)
     out += [r for r in find_token(q, net) if r["url"] not in {x["url"] for x in out}]
     fq = fts_query(q)
     if not fq:
-        return {"results": out[:n], "took_ms": round((time.perf_counter() - t0) * 1000, 1)}
+        return out[:n]
     rows = db(net).execute(
         f"""select f.url, p.realm, p.kind, p.title, snippet(fts, 3, '{HI0}', '{HI1}', '…', 14),
                    bm25(fts, 0, 8.0, 4.0, 1.0), coalesce(r.inbound,0), coalesce(r.calls,0), coalesce(r.users,0),
@@ -381,7 +391,7 @@ def search(q, n=20, net="main", kind=None):
                     "gnot": gnot(ug) if ug and ":" not in url and kind == "realm" else ""})
         if len(out) >= n:
             break
-    return {"results": out[:n], "took_ms": round((time.perf_counter() - t0) * 1000, 1)}
+    return out[:n]
 
 
 def page(url, net="main"):
