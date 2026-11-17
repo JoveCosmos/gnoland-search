@@ -120,6 +120,8 @@ rebuildable from the indexer plus a node (`crawl full`).
   not rendered live, `store.page` and `server.INDEX_URL`.
 - Packages rank by distinct importers, so one package importing another a hundred times is one
   vote; source is also only counted for paths the node lists.
+- The resting screen has three lines: what is indexed, the network switch, and links to the API page, its
+  agent (MCP) section and the source repository (2026-11-17).
 - The count line is empty when the box is empty (2026-11-15); the network and block show
   only beside results, and the resting hint carries the network switch.
 - Public text says gno.land and never a brand name (2026-11-15).
@@ -142,6 +144,9 @@ rebuildable from the indexer plus a node (`crawl full`).
   list move) and look at the shots.
 
 ## Traps
+
+- 2026-11-17: `.hint > span + span` (the second resting line's flex row) also matched the new third
+  line and spread "API, MCP, GitHub" apart; the third line has its own `.hint > .hint-links` rule.
 
 - 2026-11-16: the resting lines overflowed 360-375px phones with an ellipsis; they now scale one size
   together (`--hint-size`), and dev/shot.mjs fails on any cut text there, with 375 and 360 wide phones added.

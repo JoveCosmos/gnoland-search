@@ -52,7 +52,7 @@ for (const scheme of ["dark", "light"]) for (const [name, w, h, mobile] of sizes
   await cdp("Page.resetNavigationHistory");  // one tab serves every size; the back-walk check needs only this run's history
   await shot(`${tag}-1-rest`);
   // nothing on the resting lines may be cut: text wider than its box is a bug, not an ellipsis
-  const cut = await ev(`[...document.querySelectorAll(".hint > span, .hint-net")].filter(e => e.scrollWidth > e.clientWidth + 1).map(e => e.textContent).join(" | ")`);
+  const cut = await ev(`[...document.querySelectorAll(".hint > span, .hint-net, .hint-links a")].filter(e => e.scrollWidth > e.clientWidth + 1).map(e => e.textContent).join(" | ")`);
   if (cut) { moved++; console.log("TEXT CUT", tag, cut); }
 
   await tap("#go"); await sleep(300);
