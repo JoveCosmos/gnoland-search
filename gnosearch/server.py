@@ -27,18 +27,22 @@ _spec.loader.exec_module(mcp)
 
 WEB = os.path.join(os.path.dirname(__file__), "..", "web")
 PORT = int(os.environ.get("GNOSEARCH_PORT", "8960"))
+# The public address, for link previews (social sites need full URLs and run no script). Unset, they stay relative.
+SITE = os.environ.get("GNOSEARCH_SITE", "").rstrip("/")
 BIND = os.environ.get("GNOSEARCH_BIND", "127.0.0.1")
 STATIC = {"/": ("index.html", "text/html; charset=utf-8"), "/app.js": ("app.js", "text/javascript; charset=utf-8"),
           "/robots.txt": ("robots.txt", "text/plain; charset=utf-8"), "/api": ("api.html", "text/html; charset=utf-8"),
           "/base.css": ("base.css", "text/css; charset=utf-8"), "/theme.js": ("theme.js", "text/javascript; charset=utf-8"),
-          "/api.js": ("api.js", "text/javascript; charset=utf-8")}
+          "/api.js": ("api.js", "text/javascript; charset=utf-8"), "/favicon.ico": ("icon-32.png", "image/png"),
+          "/icon-32.png": ("icon-32.png", "image/png"), "/icon-192.png": ("icon-192.png", "image/png"),
+          "/og.jpg": ("og.jpg", "image/jpeg")}
 LIVE_URL = re.compile(r"^gno\.land/r/[A-Za-z0-9_./\-]{1,200}(:[^\s]{0,500})?$")   # rendered from the node
 INDEX_URL = re.compile(r"^(gno\.land/[rp]/[A-Za-z0-9_./\-]{1,200}(\$source)?|user:g1[0-9a-z]{38}|tx:[0-9A-F]{64}|token:gno\.land/r/[A-Za-z0-9_./\-]{1,250})$")
 NODES = {"main": chain.NODE, "test": os.environ.get("GNOSEARCH_NODE_TEST", "")}
-# img-src 'none': chain pages may embed images, and loading them would let any realm author
-# see who reads their page. The reader shows them as links instead.
+# img-src 'self': chain pages may embed images, and loading them would let any realm author
+# see who reads their page. The reader shows them as links instead. 'self' only lets the site's own icon load.
 CSP = ("default-src 'self'; script-src 'self' https://cdnjs.cloudflare.com; style-src 'self' 'unsafe-inline' "
-       "https://fonts.googleapis.com; font-src https://fonts.gstatic.com; img-src 'none'; connect-src 'self'; "
+       "https://fonts.googleapis.com; font-src https://fonts.gstatic.com; img-src 'self'; connect-src 'self'; "
        "frame-ancestors 'none'; base-uri 'none'; form-action 'none'")
 # requests per second and burst, per visitor; crawlers getting 429 is by design
 LIMITS = {"/mcp": (4, 20), "/api/search": (8, 30), "/api/page": (1, 6), "/api/stats": (1, 5), "/api/importers": (2, 10)}
@@ -208,8 +212,13 @@ class Handler(BaseHTTPRequestHandler):
                 return self.send(200, {**store.stats(net), "nets": store.nets()})
             if u.path in STATIC:
                 name, ctype = STATIC[u.path]
+                if not os.path.exists(os.path.join(WEB, name)):
+                    return self.send(404, {"error": "not found"})  # the logo files stay out of the public code
                 with open(os.path.join(WEB, name), "rb") as f:
-                    return self.send(200, f.read(), ctype, "no-cache")
+                    body = f.read()
+                if SITE and ctype.startswith("text/html"):
+                    body = body.replace(b'content="/', b'content="' + SITE.encode() + b"/")
+                return self.send(200, body, ctype, "no-cache")
             return self.send(404, {"error": "not found"})
         except Exception as e:
             return self.send(500, {"error": type(e).__name__})

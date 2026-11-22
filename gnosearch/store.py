@@ -317,6 +317,20 @@ def find_path(q, net="main"):
     return out
 
 
+PATH_NAME = 1.5  # enough for a path that spells the query to pass a busier realm that only mentions it
+
+
+def squash(s):
+    """'Gov DAO', 'gov_dao' and 'gov-dao' all become 'govdao'."""
+    return re.sub(r"[^a-z0-9]", "", s.lower())
+
+
+def path_tails(realm):
+    """Every run of trailing path parts, squashed: r/gov/dao gives {'dao', 'govdao'}."""
+    parts = realm.split("/")[2:]  # after gno.land/r
+    return {squash("".join(parts[i:])) for i in range(len(parts))}
+
+
 def find_token(q, net="main"):
     """Tokens whose symbol or name is exactly the query, any case: typing a symbol means that token.
     The title is 'Name (SYMBOL)', so both halves are matched without a column of their own."""
@@ -370,6 +384,8 @@ def _ranked(q, n, net):
         # because one bot makes thousands.
         boost = (1 + 0.45 * math.log1p(uw) + 0.05 * math.log1p(calls) + 0.25 * math.log1p(inbound)
                  + 0.3 * math.log1p(imports) + (0.3 if ":" not in url and "$" not in url else 0))
+        if ":" not in url and "$" not in url and squash(q) in path_tails(realm):
+            boost *= PATH_NAME  # "govdao" means r/gov/dao: a path is owned, unlike a title anyone can copy
         if snip.startswith("realm without a page"):
             boost *= 0.35  # a realm with something to read beats one that is only a name
         boost *= KIND_WEIGHT.get(kind, 1.0)

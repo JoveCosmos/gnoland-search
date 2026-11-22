@@ -241,6 +241,19 @@ class ExactPath(unittest.TestCase):
         self.assertEqual(store.find_path("r/a%/b"), [])
 
 
+class PathName(unittest.TestCase):
+    def test_tails(self):
+        self.assertEqual(store.path_tails("gno.land/r/gov/dao"), {"dao", "govdao"})
+        self.assertEqual(store.squash("Gov_DAO-x 2"), "govdaox2")
+
+    def test_path_that_spells_the_query_beats_a_busier_mention(self):
+        g, w = "gno.land/r/pnq/zork", "gno.land/r/busy/drop"
+        store.put_realm(g, [(g, "PnqZork", "the pnqzork realm", "")], 1, 1)
+        store.put_realm(w, [(w, "Drop", "claim here, vote in pnqzork pnqzork", "")], 1, 1)
+        store.set_signals(uweight={w: 60.0, g: 1.5})
+        self.assertEqual(store.search("pnqzork")["results"][0]["url"], g)
+
+
 class Votes(unittest.TestCase):
     def test_imports_count_owners_not_packages(self):
         for i in range(20):
