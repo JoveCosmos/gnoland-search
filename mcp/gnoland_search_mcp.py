@@ -29,7 +29,7 @@ TOOLS = [
     {"name": "search",
      "description": "Search everything on gno.land by what it says: realm pages, package code and docs, accounts "
                     "(names or addresses), GRC20 tokens (symbol or name) and transactions (hash prefix). A package "
-                    "path such as r/gnoland/blog returns that path first. Ranked by real use on chain.",
+                    "path such as r/gnoland/blog returns that path first. Ranked by real on-chain use.",
      "inputSchema": {"type": "object", "required": ["query"], "properties": {
          "query": {"type": "string", "description": "words, a package path, a g1 address, a token symbol or a tx hash"},
          "kind": {"type": "string", "enum": ["realm", "pkg", "code", "user", "token", "tx"], "description": "only this kind"},
