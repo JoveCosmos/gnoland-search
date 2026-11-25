@@ -13,6 +13,9 @@ import urllib.request
 
 NODE = os.environ.get("GNOSEARCH_NODE", "http://127.0.0.1:26657")  # a gno.land node's RPC
 GAP = float(os.environ.get("GNOSEARCH_NODE_GAP", "0.5"))
+# vm/qpaths lists 1,000 paths unless the query asks for more, and never more than 10,000, with no paging
+# (2026-11-25: the testnet passed 900 realms while every crawl took the first 1,000 as the whole chain)
+PATHS_MAX = 10_000
 
 _pace, _last = threading.Lock(), [0.0]
 
@@ -42,8 +45,12 @@ def abci(path, data, timeout=20, node=None):
 
 
 def paths(prefix):
-    """All package paths under a prefix, e.g. 'gno.land/r/'."""
-    return [p.strip() for p in abci("vm/qpaths", prefix).splitlines() if p.strip()]
+    """All package paths under a prefix, e.g. 'gno.land/r/'. A list as long as the node's cap may be cut
+    short, and a crawl that trusts it drops every path past the cut, so that is an error."""
+    out = [p.strip() for p in abci(f"vm/qpaths?limit={PATHS_MAX}", prefix).splitlines() if p.strip()]
+    if len(out) >= PATHS_MAX:
+        raise QueryError(f"the node listed {len(out)} paths under {prefix}, its most; the list may be cut")
+    return out
 
 
 def render(realm, sub="", node=None):

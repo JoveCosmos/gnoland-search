@@ -47,12 +47,22 @@ def query(sql, **params):
 
 
 def touched_since(h):
-    """Realms called or deployed in successful txs above height h, and the highest height read."""
-    rows = query("""select pkg_path, max(height) from gno_tx_msg
-                    where chain_id = :'chain' and success and height > :'lo'::bigint and height <= :'hi'::bigint
-                    group by 1""", chain=CHAIN, lo=int(h), hi=int(h) + FOLLOW_SPAN)
-    top = max([int(m) for _, m in rows], default=int(h))
-    return {p for p, _ in rows if p.startswith("gno.land/r/")}, top
+    """Packages and realms called or deployed by successful messages in the FOLLOW_SPAN blocks above h, and
+    the height read up to: the last transaction there, or, when there is none, the block before the next
+    transaction, so a quiet stretch longer than the span never stops follow (2026-11-25: it waited for a
+    transaction inside the span and stood still). Reads by transaction height, which gno_tx indexes:
+    gno_tx_msg has no height index, and polling it by height scanned the whole table every few seconds."""
+    lo, hi = int(h), int(h) + FOLLOW_SPAN
+    rows = query("""select coalesce(m.pkg_path, ''), max(t.height) from gno_tx t
+                    left join gno_tx_msg m on m.chain_id = t.chain_id and m.tx_hash = t.hash and m.success
+                    where t.chain_id = :'chain' and t.height > :'lo'::bigint and t.height <= :'hi'::bigint
+                    group by 1""", chain=CHAIN, lo=lo, hi=hi)
+    if rows:
+        return {p for p, _ in rows if p.startswith("gno.land/")}, max(int(m) for _, m in rows)
+    # one NULL column comes back from psql --csv as a blank line, which csv reads as an empty row
+    nxt = [r[0] for r in query("select min(height) from gno_tx where chain_id = :'chain' and height > :'hi'::bigint",
+                               chain=CHAIN, hi=hi) if r and r[0]]
+    return set(), int(nxt[0]) - 1 if nxt else lo
 
 
 def usage(lo, hi):
@@ -105,9 +115,11 @@ def gnot_in(lo, hi):
 
 
 def coins(lo, hi):
-    """(hash, coins) of first messages between two heights, for transactions already copied."""
-    return query("""select tx_hash, coalesce(coins, '') from gno_tx_msg
-                    where chain_id = :'chain' and msg_index = 0 and height > :'lo'::bigint and height <= :'hi'::bigint""",
+    """(hash, coins) of first messages between two heights, for transactions already copied. By
+    transaction height, like touched_since: gno_tx_msg has no height index."""
+    return query("""select m.tx_hash, coalesce(m.coins, '') from gno_tx t
+                    join gno_tx_msg m on m.chain_id = t.chain_id and m.tx_hash = t.hash and m.msg_index = 0
+                    where t.chain_id = :'chain' and t.height > :'lo'::bigint and t.height <= :'hi'::bigint""",
                  chain=CHAIN, lo=int(lo), hi=int(hi))
 
 

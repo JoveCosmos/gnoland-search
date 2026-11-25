@@ -22,15 +22,19 @@ by hash prefix (`store.find_tx`), shown from `store.page("tx:...")`.
 
 - `gnosearch/chain.py`: ABCI queries (`vm/qpaths`, `vm/qrender`, `vm/qfuncs`) and `/status`. Every
   request in a process waits `GNOSEARCH_NODE_GAP` (0.5 s) after the previous one, one at a time.
-- `gnosearch/indexer.py`: chain history. `touched_since(h)` tells follow which realms changed;
+  `paths()` asks for `PATHS_MAX` (the node's most) and fails on a list that long, which may be cut.
+- `gnosearch/indexer.py`: chain history. `touched_since(h)` tells follow which realms and packages changed,
+  reading by transaction height (`gno_tx` has a height index, `gno_tx_msg` has none);
   `usage(lo, hi)` gives calls, users and last use per realm for the last ~30 days; `accounts()`,
   `names()` (usernames from `r/sys/namereg/v0` Register, validator names from `r/gnops/valopers`
   Register) and `txs(lo, hi)` feed the account and transaction entries.
 - `gnosearch/crawl.py`: `full` (daily, off-peak) crawls every realm, reads
   source not read yet (at most `FILE_BUDGET` files a run; deployed code never changes, so each
   package is read once), rebuilds accounts, copies new transactions and refreshes the signals.
-  `follow` (always on) re-crawls touched realms, reads the source of new deploys and copies new
-  transactions. Sequential.
+  `follow` (always on) re-crawls touched realms, reads the source of new deploys (realms and packages)
+  and copies new transactions. Sequential. For a health check, follow writes `meta.follow_at` (its last
+  good step) and `follow_behind` (blocks between the indexer's newest transaction and the index) once a
+  minute, and full writes `full_at` when it finishes.
 - `gnosearch/store.py`: the index. `pages` holds each page with its kind, `fts` the full-text
   index, `realms` one row of signals per entry (users, inbound, calls, imports, last_height,
   code_done), `imports` who imports whom, `tx` transactions, `meta` the indexed heights
@@ -85,8 +89,13 @@ rebuildable from the indexer plus a node (`crawl full`).
   (`TITLE_MAX`, `BODY_MAX`, `MD_MAX`). In the browser it reaches the page only as text nodes
   (results, highlights built as `mark` elements around text) or through DOMPurify plus `tame()`
   (pages). Never `innerHTML` a chain string.
-- Pages never load images or embeds from chain links: CSP `img-src 'none'`, and `tame()` turns
-  images into links. External links show their host and carry `nofollow noopener noreferrer`.
+- Pages never load images or embeds from chain links: CSP `img-src 'self'` (only the site's own icon),
+  and `tame()` turns images into links. External links show their host and carry `nofollow noopener noreferrer`.
+- Only the node's own answer drops indexed text: a realm whose crawl hits a failed request keeps its
+  pages (`FAILS_MAX` failures in a row stop a full crawl), a source read that fails leaves the entry
+  unread for a later run, and a full crawl drops no path when more than `DROP_MAX` of them are missing
+  from the node's list (`crawl.stale`). Deployed paths never leave the chain (2026-11-25).
+- Snippets are built only for the results returned (`store._snippets`), after ranking and caps.
 - The search box reaches SQL only through `fts_query`: word characters only, each word quoted,
   at most `WORDS_MAX` words of `WORD_MAX` characters, prefix match only from `PREFIX_MIN` letters.
 - Ranking will be gamed, so (2026-11-15):
@@ -148,6 +157,20 @@ rebuildable from the indexer plus a node (`crawl full`).
   list move) and look at the shots.
 
 ## Traps
+
+- 2026-11-25: `vm/qpaths` answers at most 1,000 paths unless the query path asks (`vm/qpaths?limit=N`, at
+  most 10,000, no paging). The crawl took the first 1,000 as the whole chain and would have dropped every
+  testnet realm past them; the testnet had 929.
+- 2026-11-25: a source read that failed marked the entry read, so a deploy that was not readable yet
+  (parked until approved) never got its source: 8 gnoswap realms on mainnet, 64 on testnet. Full now
+  re-reads entries marked read without a source page (`store.reread_missing_source`).
+- 2026-11-25: follow moved only to the last transaction it saw, so a span of `FOLLOW_SPAN` blocks with no
+  transaction stopped it for good (the testnet had eleven); `touched_since` now steps to the block
+  before the next transaction. It also polled `gno_tx_msg` by height, which has no height index: a
+  full table scan every few seconds per network. Read windows by `gno_tx` height and join.
+- 2026-11-25: `snippet()` in the ranking query ran for every match before `limit`, so "the" cost half a
+  second to a second; ranking now reads bm25 only and `_snippets` builds the few that are shown.
+- 2026-11-25: a crawl that hit a timeout saved what it had, so one node hiccup emptied a realm's pages.
 
 - 2026-11-17: `.hint > span + span` (the second resting line's flex row) also matched the new third
   line and spread "API, MCP, GitHub" apart; the third line has its own `.hint > .hint-links` rule.

@@ -18,9 +18,16 @@ MAX_DEPTH = 2
 USAGE_BLOCKS = 740_000  # about 30 days of blocks, for the usage ranking
 FILE_BUDGET = 1500      # source files read per full run; code never changes, so the rest follow next run
 SRC_MAX = 40_000        # characters of one file kept
+DROP_MAX = 0.1          # share of indexed paths one full crawl may drop; paths never leave the chain
+FAILS_MAX = 5           # realms in a row whose crawl failed before a full crawl stops: the node is down
 IMPORT = re.compile(r'"(gno\.land/[pr]/[A-Za-z0-9_./\-]{1,200})"')
 
 LINK = re.compile(r"""(?:\]\(|href=["'])(/r/[^)"'\s#]+)""")
+
+
+def one_line(e):
+    # node errors span lines (stack traces); a log line per event keeps the logs readable
+    return " ".join(str(e).split())[:160]
 
 
 def split(link):
@@ -50,7 +57,9 @@ def title_of(md, url):
 
 
 def crawl_realm(realm):
-    """All pages of one realm, breadth first. Returns (pages, the other realms it links to)."""
+    """All pages of one realm, breadth first. Returns (pages, the other realms it links to). Only the node's
+    own answer (QueryError) drops a page; a request that fails raises, because saving what a hiccup left
+    would replace the realm's pages with fewer (2026-11-25)."""
     pages, seen, out = [], set(), set()
     queue = collections.deque([("", 0)])
     while queue and len(pages) < MAX_PAGES:
@@ -68,8 +77,6 @@ def crawl_realm(realm):
                     funcs = []
                 body = "realm without a page. functions: " + " ".join(funcs)
                 pages.append((realm, realm.replace("gno.land/r/", ""), body, ""))
-            continue
-        except Exception:
             continue
         url = realm if sub == "" else f"{realm}:{sub}"
         pages.append((url, title_of(md, url), text_of(md), md))
@@ -92,9 +99,17 @@ def crawl(realms, h):
     their own target, is one vote (or none). Sequential on purpose, so a crawl
     never crowds the node it reads from."""
     inbound = collections.defaultdict(set)
-    ts = int(time.time())
+    ts, fails = int(time.time()), 0
     for r in realms:
-        pages, out = crawl_realm(r)
+        try:
+            pages, out = crawl_realm(r)
+        except Exception as e:  # its pages stay as they were until a crawl gets through
+            print("crawl error:", r, one_line(e), flush=True)
+            fails += 1
+            if fails >= FAILS_MAX:
+                raise RuntimeError(f"{fails} realms in a row could not be crawled; is the node up?")
+            continue
+        fails = 0
         store.put_realm(r, pages, ts, h)
         for target in out:
             if store.namespace(target) != store.namespace(r):
@@ -108,16 +123,14 @@ def is_source(name):
 
 
 def read_code(entry, budget):
-    """Index the source of one package or realm, once (deployed code never changes). Returns files read."""
+    """Index the source of one package or realm, once (deployed code never changes). Returns files read.
+    Any file that fails fails the whole read, so a package is never marked read with files missing."""
     names = [n for n in chain.files(entry) if is_source(n)][:40]
     if len(names) + 1 > budget:
         return 0
     texts, imports = [], set()
     for n in names:
-        try:
-            src = store.clean(chain.file(entry, n), SRC_MAX)
-        except Exception:
-            continue
+        src = store.clean(chain.file(entry, n), SRC_MAX)
         texts.append((n, src))
         if n.endswith(".gno"):
             imports.update(i for i in IMPORT.findall(src) if i != entry)
@@ -146,8 +159,10 @@ def code(entries):
         try:
             used = read_code(e, budget)
         except Exception as ex:
-            print("source error:", e, str(ex)[:120], flush=True)
-            store.put_imports(e, [])  # marks it read: a path the node cannot list is not retried every block
+            # left unread, so a later run reads it: a deploy can be unreadable for a while (parked until it
+            # is approved), and marking it read kept its source out for good (2026-11-25: 8 gnoswap realms)
+            print("source error:", e, one_line(ex), flush=True)
+            budget -= 1
             continue
         if not used:
             break
@@ -249,16 +264,28 @@ def where():
           f" via {'INDEXER_RO_URL' if os.environ.get('INDEXER_RO_URL') else 'nothing (INDEXER_RO_URL unset)'}", flush=True)
 
 
+def stale(have, live):
+    """Indexed paths the node no longer lists, to drop. Deployed paths never leave the chain, so only a few
+    go (paths touched by transactions that never became packages); many missing means the node's list is
+    wrong, and trusting it would empty the index, so the crawl stops before changing anything."""
+    gone = sorted(set(have) - set(live))
+    if len(gone) > max(10, DROP_MAX * len(have)):
+        raise SystemExit(f"refused: {len(gone)} of {len(have)} indexed paths are missing from the node's list"
+                         f" of {len(live)}; nothing was changed")
+    return gone
+
+
 def full():
     where()
     t0 = time.time()
     h = chain.height()
     realms, pkgs = chain.paths("gno.land/r/"), chain.paths("gno.land/p/")
+    have = [r for (r,) in store.db().execute("select realm from realms where realm like 'gno.land/%'")]
+    for old in stale(have, set(realms) | set(pkgs)):
+        store.drop_realm(old)
     live = set(realms) | set(pkgs)
-    for (old,) in store.db().execute("select realm from realms where realm like 'gno.land/%'").fetchall():
-        if old not in live:
-            store.drop_realm(old)
     inbound = crawl(realms, h)
+    store.reread_missing_source()
     code(pkgs + realms)
     calls, users_, weight, last = indexer.usage(h - USAGE_BLOCKS, h)
     jumps(weight)
@@ -272,6 +299,7 @@ def full():
     store.set_signals(inbound={r: n for r, n in inbound.items() if r in live}, calls={**calls, **ucalls},
                       users=users_, uweight=weight, imports=store.import_counts(), last_height={**last, **ulast}, gnot=gnot)
     store.meta("height", h)
+    store.meta("full_at", int(time.time()))  # for a health check: when the last full crawl finished
     s = store.stats()
     print(f"full crawl: {len(realms)} realms, {len(pkgs)} packages, {ntok} tokens, {s['users']} users, {s['txs']} transactions,"
           f" {time.time() - t0:.0f}s, height {h}", flush=True)
@@ -281,7 +309,8 @@ def follow(every=3.0):
     """Re-crawl realms as transactions touch them, within a block or two, and copy the new transactions."""
     where()
     h = int(store.meta("height") or chain.height())
-    checked = 0.0
+    store.meta("follow_at", int(time.time()))  # a health check gives a first step that hangs ten minutes
+    checked = beat = 0.0
     while True:
         try:
             if time.time() - checked > 600:  # coverage costs a second or more, so every ten minutes
@@ -301,8 +330,14 @@ def follow(every=3.0):
                 txs(top)
                 h = top
                 store.meta("height", h)
+            if time.time() - beat > 60:
+                # for a health check: when follow last got through a step, and how many blocks the
+                # indexer's newest transaction is ahead of the index (a stuck follow grows it)
+                beat = time.time()
+                store.meta("follow_at", int(beat))
+                store.meta("follow_behind", max(0, indexer.top_height() - h))
         except Exception as e:
-            print("follow error:", e, flush=True)
+            print("follow error:", one_line(e), flush=True)
             time.sleep(30)  # an indexer or node outage logs twice a minute, not every few seconds
         time.sleep(every)
 

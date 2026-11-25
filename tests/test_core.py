@@ -1,12 +1,34 @@
 """Core checks without a browser or network: query parsing, cleaning, extraction, ranking.
 Run: python3 -m unittest discover -s tests"""
+import contextlib
+import io
 import os
 import tempfile
 import unittest
 
 os.environ["GNOSEARCH_DB"] = os.path.join(tempfile.mkdtemp(prefix="gnosearch-test-"), "index.db")
 
-from gnosearch import crawl, store  # noqa: E402
+from gnosearch import chain, crawl, indexer, store  # noqa: E402
+
+
+@contextlib.contextmanager
+def stub(module, **fakes):
+    """Replace module attributes for one block, quietly (the crawler prints progress)."""
+    old = {k: getattr(module, k) for k in fakes}
+    for k, v in fakes.items():
+        setattr(module, k, v)
+    try:
+        with contextlib.redirect_stdout(io.StringIO()):
+            yield
+    finally:
+        for k, v in old.items():
+            setattr(module, k, v)
+
+
+def fail(e):
+    def raise_(*a, **k):
+        raise e
+    return raise_
 
 
 class Query(unittest.TestCase):
@@ -205,6 +227,13 @@ class Paging(unittest.TestCase):
         self.assertLessEqual(len(r["results"]), 1)
         self.assertFalse(r["more"])
 
+    def test_every_page_has_snippets_and_no_row_ids(self):
+        for off in (0, 20, 40):
+            for r in store.search("pagerword", 20, offset=off)["results"]:
+                self.assertIn("\x02pagerword\x03", r["snippet"])
+                self.assertNotIn("_row", r)
+        self.assertIn("\x02", store.search("pagerword", 5, kind="realm")["results"][0]["snippet"])
+
 
 class ExactPath(unittest.TestCase):
     @classmethod
@@ -323,6 +352,92 @@ class Source(unittest.TestCase):
 
     def test_imports(self):
         self.assertEqual(crawl.IMPORT.findall('import (\n "gno.land/p/nt/avl/v0"\n "strings"\n)'), ["gno.land/p/nt/avl/v0"])
+
+    def test_a_failed_read_is_read_again_later(self):
+        e, done = "gno.land/r/parked/x", lambda e: store.db().execute(
+            "select 1 from realms where realm=? and code_done=1", (e,)).fetchone()
+        with stub(chain, files=fail(chain.QueryError("invalid package"))):
+            crawl.code([e])  # a deploy parked until it is approved
+        self.assertIsNone(done(e))
+        with stub(chain, files=lambda p: ["a.gno", "b.gno"], file=lambda p, n: fail(TimeoutError())() if n == "b.gno" else "package x"):
+            crawl.code([e])  # one file failing fails the read: never marked read with files missing
+        self.assertIsNone(done(e))
+        with stub(chain, files=lambda p: ["a.gno"], file=lambda p, n: "package x // parked"):
+            crawl.code([e])
+        self.assertTrue(done(e))
+        self.assertIn("parked", store.page(e + "$source")["md"])
+
+    def test_marked_read_without_source_is_read_again(self):
+        store.put_imports("gno.land/r/old/bug", [])  # how a failed read was marked until 2026-11-25
+        store.reread_missing_source()
+        self.assertEqual(store.db().execute("select code_done from realms where realm='gno.land/r/old/bug'").fetchone(), (0,))
+
+
+class Paths(unittest.TestCase):
+    def test_the_node_is_asked_for_all_and_a_full_list_is_refused(self):
+        asked = []
+        listing = lambda n: lambda path, data, **k: asked.append(path) or "\n".join(f"gno.land/r/a/x{i}" for i in range(n))
+        with stub(chain, abci=listing(1000)):
+            self.assertEqual(len(chain.paths("gno.land/r/")), 1000)
+        self.assertEqual(asked, [f"vm/qpaths?limit={chain.PATHS_MAX}"])  # the node lists 1,000 unless asked
+        with stub(chain, abci=listing(chain.PATHS_MAX)), self.assertRaises(chain.QueryError):
+            chain.paths("gno.land/r/")
+
+    def test_a_short_list_drops_nothing(self):
+        have = [f"gno.land/r/a/x{i:03d}" for i in range(200)]
+        self.assertEqual(crawl.stale(have, set(have[:197])), have[197:])  # a few touched paths that never deployed
+        with self.assertRaises(SystemExit):
+            crawl.stale(have, set(have[:150]))
+
+
+class Crawl(unittest.TestCase):
+    def test_a_failed_request_keeps_the_pages(self):
+        r = "gno.land/r/keep/x"
+        store.put_realm(r, [(r, "Keep", "kept words", "# Keep"), (r + ":sub", "Sub", "sub words", "# Sub")], 1, 1)
+        with stub(chain, render=lambda realm, sub="", node=None: "# Keep\n[s](/r/keep/x:sub)" if sub == "" else fail(TimeoutError())()):
+            crawl.crawl([r], 2)  # the sub-page timed out
+        self.assertEqual(store.page(r + ":sub")["title"], "Sub")
+
+    def test_a_dead_node_stops_the_crawl(self):
+        with stub(chain, render=fail(ConnectionRefusedError())), self.assertRaises(RuntimeError):
+            crawl.crawl([f"gno.land/r/dead/x{i}" for i in range(crawl.FAILS_MAX + 2)], 1)
+
+    def test_a_realm_without_render_still_gets_its_functions(self):
+        r = "gno.land/r/norender/x"
+        with stub(chain, render=fail(chain.QueryError("no Render")), funcs=lambda realm, node=None: ["Transfer"]):
+            crawl.crawl([r], 1)
+        self.assertEqual(store.db().execute("select body from pages where url=?", (r,)).fetchone(),
+                         ("realm without a page. functions: Transfer",))
+
+
+class Follow(unittest.TestCase):
+    def reads(self, window, after=None):  # rows as indexer.query returns them; psql writes a lone NULL as a blank line
+        return lambda sql, **p: ([[after]] if after else [[]]) if "min(height)" in sql else window
+
+    def test_packages_and_realms_are_touched(self):
+        with stub(indexer, query=self.reads([["gno.land/p/a/b", "1010"], ["gno.land/r/a/c", "1005"], ["", "1020"]])):
+            self.assertEqual(indexer.touched_since(1000), ({"gno.land/p/a/b", "gno.land/r/a/c"}, 1020))
+
+    def test_a_quiet_stretch_longer_than_a_step_is_crossed(self):
+        with stub(indexer, query=self.reads([], "90001")):
+            self.assertEqual(indexer.touched_since(1000), (set(), 90000))
+
+    def test_at_the_newest_block_it_waits(self):
+        with stub(indexer, query=self.reads([])):
+            self.assertEqual(indexer.touched_since(1000), (set(), 1000))
+
+    def test_a_lone_null_reads_as_an_empty_row(self):
+        old = indexer.subprocess.run
+        indexer.subprocess.run = lambda *a, **k: type("R", (), {"returncode": 0, "stdout": "min\n\n", "stderr": ""})()
+        os.environ["INDEXER_RO_URL"], had = "postgres://test", os.environ.get("INDEXER_RO_URL")
+        try:
+            self.assertEqual(indexer.query("select min(height)"), [[]])  # what tripped follow on its first quiet poll
+        finally:
+            indexer.subprocess.run = old
+            if had is None:
+                del os.environ["INDEXER_RO_URL"]
+            else:
+                os.environ["INDEXER_RO_URL"] = had
 
 
 if __name__ == "__main__":

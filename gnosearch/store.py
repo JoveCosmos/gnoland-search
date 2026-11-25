@@ -156,6 +156,15 @@ def put_imports(src, dsts):
         c.execute("update realms set code_done=1 where realm=?", (src,))
 
 
+def reread_missing_source():
+    """Entries marked read that have no source page go back to unread. Until 2026-11-25 a failed read
+    marked them read, which kept the source of 8 gnoswap realms out of the index."""
+    c = db()
+    with c:
+        c.execute("""update realms set code_done = 0 where code_done = 1 and realm like 'gno.land/%' and not exists
+                     (select 1 from pages p where p.realm = realms.realm and p.kind in ('pkg', 'code'))""")
+
+
 def import_counts():
     """Importers per package, counted by namespace: twenty packages of one owner importing a target
     are one vote, and an owner importing their own package is none."""
@@ -359,8 +368,21 @@ def search(q, n=20, net="main", kind=None, offset=0):
     else:
         ranked = _ranked(q, min(offset + n + 1, MAX_RESULTS + 1), net)
     end = min(offset + n, MAX_RESULTS)
-    return {"results": ranked[offset:end], "more": len(ranked) > end and end < MAX_RESULTS,
+    return {"results": _snippets(q, ranked[offset:end], net), "more": len(ranked) > end and end < MAX_RESULTS,
             "took_ms": round((time.perf_counter() - t0) * 1000, 1)}
+
+
+def _snippets(q, results, net):
+    """Fill in the snippets of text results, for the rows returned only. A snippet re-reads its page's
+    text; building one for every match before the list was cut made a common word like "the" cost half
+    a second to a second (2026-11-25)."""
+    want = {r.pop("_row"): r for r in results if "_row" in r}
+    if want:
+        for row, snip in db(net).execute(f"""select rowid, snippet(fts, 3, '{HI0}', '{HI1}', '…', 14) from fts
+                                             where fts match ? and rowid in ({','.join('?' * len(want))})""",
+                                          (fts_query(q), *want)):
+            want[row]["snippet"] = snip
+    return results
 
 
 def _ranked(q, n, net):
@@ -371,13 +393,13 @@ def _ranked(q, n, net):
     if not fq:
         return out[:n]
     rows = db(net).execute(
-        f"""select f.url, p.realm, p.kind, p.title, snippet(fts, 3, '{HI0}', '{HI1}', '…', 14),
-                   bm25(fts, 0, 8.0, 4.0, 1.0), coalesce(r.inbound,0), coalesce(r.calls,0), coalesce(r.users,0),
-                   coalesce(r.imports,0), coalesce(r.last_height,0), coalesce(r.gnot,0), coalesce(r.uweight,0)
-            from fts f join pages p on p.url=f.url left join realms r on r.realm=p.realm
-            where fts match ? order by bm25(fts, 0, 8.0, 4.0, 1.0) limit 200""", (fq,)).fetchall()
+        """select f.rowid, f.url, p.realm, p.kind, p.title, substr(p.body, 1, 20),
+                  bm25(fts, 0, 8.0, 4.0, 1.0), coalesce(r.inbound,0), coalesce(r.calls,0), coalesce(r.users,0),
+                  coalesce(r.imports,0), coalesce(r.last_height,0), coalesce(r.gnot,0), coalesce(r.uweight,0)
+           from fts f join pages p on p.url=f.url left join realms r on r.realm=p.realm
+           where fts match ? order by bm25(fts, 0, 8.0, 4.0, 1.0) limit 200""", (fq,)).fetchall()
     scored = []
-    for url, realm, kind, title, snip, bm, inbound, calls, users, imports, last, ug, uw in rows:
+    for row, url, realm, kind, title, head, bm, inbound, calls, users, imports, last, ug, uw in rows:
         # Ranking will be gamed, so text match alone decides little. Real use counts most: uw is users
         # weighted by account age, breadth and active days (see indexer.usage). Inbound and imports
         # count distinct other namespaces linking here or importing it. Raw calls count little,
@@ -386,15 +408,15 @@ def _ranked(q, n, net):
                  + 0.3 * math.log1p(imports) + (0.3 if ":" not in url and "$" not in url else 0))
         if ":" not in url and "$" not in url and squash(q) in path_tails(realm):
             boost *= PATH_NAME  # "govdao" means r/gov/dao: a path is owned, unlike a title anyone can copy
-        if snip.startswith("realm without a page"):
+        if (head or "").startswith("realm without a page"):
             boost *= 0.35  # a realm with something to read beats one that is only a name
         boost *= KIND_WEIGHT.get(kind, 1.0)
-        scored.append((bm * boost, url, realm, kind, title, snip, users, inbound, imports, calls, last, ug))  # bm25 < 0: lower is better
+        scored.append((bm * boost, url, row, realm, kind, title, users, inbound, imports, calls, last, ug))  # bm25 < 0: lower is better
     scored.sort()
     per_realm, per_ns, seen = {}, {}, {r["url"] for r in out}
     for r in out:  # exact-path results count towards the caps too
         per_realm[r["realm"]] = per_realm.get(r["realm"], 0) + 1
-    for _, url, realm, kind, title, snip, users, inbound, imports, calls, last, ug in scored:
+    for _, url, row, realm, kind, title, users, inbound, imports, calls, last, ug in scored:
         ns = namespace(realm)
         if url in seen:
             continue
@@ -402,7 +424,7 @@ def _ranked(q, n, net):
             continue  # one entry, or one namespace full of look-alikes, cannot fill the page
         per_realm[realm] = per_realm.get(realm, 0) + 1
         per_ns[ns] = per_ns.get(ns, 0) + 1
-        out.append({"url": url, "realm": realm, "kind": kind, "title": title, "snippet": snip, "users": users,
+        out.append({"url": url, "realm": realm, "kind": kind, "title": title, "snippet": "", "_row": row, "users": users,
                     "links": inbound, "imports": imports, "txs": calls if kind == "user" else 0, "last": last,
                     "gnot": gnot(ug) if ug and ":" not in url and kind == "realm" else ""})
         if len(out) >= n:
