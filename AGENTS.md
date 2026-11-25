@@ -56,6 +56,10 @@ by hash prefix (`store.find_tx`), shown from `store.page("tx:...")`.
   `rs-` results, `rd-` reader, `th-` day/night button, `hint` resting lines, `ad-` API page. Colours are tokens on `:root`; the dark set is written twice,
   under `prefers-color-scheme` and under `[data-theme="dark"]` (the button's choice, kept in
   localStorage), and both must change together. The public text names gno.land, never a brand.
+  Scrollbars are themed once in `base.css` (accent thumb from `--ln`, no arrows) for every page. Chrome ignores
+  the `::-webkit-scrollbar` rules on any element that sets `scrollbar-width` or `scrollbar-color`, so no page may
+  set either; the standard pair sits behind `@supports` for Firefox only (2026-11-25: a stray `scrollbar-width: thin`
+  on the results list had brought back the grey classic bar).
 
 ## Indexer dependency
 
