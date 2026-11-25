@@ -51,7 +51,8 @@ by hash prefix (`store.find_tx`), shown from `store.page("tx:...")`.
 - `web/`: the search page and the developers page (`api.html`: two copy-ready examples, for apps and
   for agents, filled with the site's own address by `api.js` so the repository names none, then a folded
   full reference; it documents the same routes as `server.py`: change both together). `base.css` holds the tokens both use; `theme.js` (a classic
-  script in head, so no flash) applies the day/night choice. Class prefixes: `sr-` search bar,
+  script in head, so no flash) applies the day/night choice. The reader turns a page's markdown into HTML with marked
+  and cleans it with DOMPurify, unchanged copies in `vendor/` (see the rules). Class prefixes: `sr-` search bar,
   `rs-` results, `rd-` reader, `th-` day/night button, `hint` resting lines, `ad-` API page. Colours are tokens on `:root`; the dark set is written twice,
   under `prefers-color-scheme` and under `[data-theme="dark"]` (the button's choice, kept in
   localStorage), and both must change together. The public text names gno.land, never a brand.
@@ -91,6 +92,12 @@ rebuildable from the indexer plus a node (`crawl full`).
   (pages). Never `innerHTML` a chain string.
 - Pages never load images or embeds from chain links: CSP `img-src 'self'` (only the site's own icon),
   and `tame()` turns images into links. External links show their host and carry `nofollow noopener noreferrer`.
+- Scripts load from this site only (CSP `script-src 'self'`, 2026-11-25). `web/vendor/` holds marked and DOMPurify
+  byte for byte as their npm releases ship them, each with its license; never edit them. The file name carries the
+  version, so browsers keep them a year: an upgrade is a new file, its `server.STATIC` line and its script tag,
+  changed together (`Scripts` in `tests/test_core.py` checks they match). Before switching, check the new copy
+  against the npm registry's integrity hash and compare what the old and new copies make of every indexed page
+  (DOMPurify 3.1.6 to 3.5.0 changed only the order of attributes).
 - Only the node's own answer drops indexed text: a realm whose crawl hits a failed request keeps its
   pages (`FAILS_MAX` failures in a row stop a full crawl), a source read that fails leaves the entry
   unread for a later run, and a full crawl drops no path when more than `DROP_MAX` of them are missing

@@ -9,6 +9,11 @@ code() { curl -s -o /dev/null -w '%{http_code}' "$B$1"; }
 [ "$(code /app.js)" = 200 ] && ok "app" || bad "app"
 curl -s "$B/robots.txt" | grep -q "Disallow: /api/" && ok "robots.txt" || bad "robots.txt"
 curl -s -D - -o /dev/null "$B/" | grep -qi "img-src 'self';" && ok "csp" || bad "csp"
+# scripts come from this site only: the policy says so, and every script the page names is here
+curl -s -D - -o /dev/null "$B/" | grep -qi "script-src 'self';" && ok "csp scripts" || bad "csp scripts"
+s=$(curl -s "$B/" | grep -o '<script[^>]* src="[^"]*"' | sed 's/.* src="//; s/"$//'); miss=""
+for p in $s; do case "$p" in /*) [ "$(code "$p")" = 200 ] || miss="$miss $p" ;; *) miss="$miss $p" ;; esac; done
+[ -n "$s" ] && [ -z "$miss" ] && ok "scripts served here" || bad "scripts served here:$miss"
 curl -s "$B/api/search?q=board" | grep -q '"url"' && ok "search finds" || bad "search finds"
 curl -s "$B/api/search?q=%3Cimg%20onerror%3Dx%3E%22%20OR%20NEAR(" | grep -q '"results"' && ok "hostile query" || bad "hostile query"
 [ "$(code '/api/page?u=javascript:alert(1)')" = 400 ] && ok "bad page address" || bad "bad page address"

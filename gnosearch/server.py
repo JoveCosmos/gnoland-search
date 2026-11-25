@@ -35,13 +35,17 @@ STATIC = {"/": ("index.html", "text/html; charset=utf-8"), "/app.js": ("app.js",
           "/base.css": ("base.css", "text/css; charset=utf-8"), "/theme.js": ("theme.js", "text/javascript; charset=utf-8"),
           "/api.js": ("api.js", "text/javascript; charset=utf-8"), "/favicon.ico": ("icon-32.png", "image/png"),
           "/icon-32.png": ("icon-32.png", "image/png"), "/icon-192.png": ("icon-192.png", "image/png"),
-          "/og.jpg": ("og.jpg", "image/jpeg")}
+          "/og.jpg": ("og.jpg", "image/jpeg"),
+          "/vendor/marked-12.0.2.min.js": ("vendor/marked-12.0.2.min.js", "text/javascript; charset=utf-8"),
+          "/vendor/dompurify-3.5.0.min.js": ("vendor/dompurify-3.5.0.min.js", "text/javascript; charset=utf-8")}
 LIVE_URL = re.compile(r"^gno\.land/r/[A-Za-z0-9_./\-]{1,200}(:[^\s]{0,500})?$")   # rendered from the node
 INDEX_URL = re.compile(r"^(gno\.land/[rp]/[A-Za-z0-9_./\-]{1,200}(\$source)?|user:g1[0-9a-z]{38}|tx:[0-9A-F]{64}|token:gno\.land/r/[A-Za-z0-9_./\-]{1,250})$")
 NODES = {"main": chain.NODE, "test": os.environ.get("GNOSEARCH_NODE_TEST", "")}
 # img-src 'self': chain pages may embed images, and loading them would let any realm author
 # see who reads their page. The reader shows them as links instead. 'self' only lets the site's own icon load.
-CSP = ("default-src 'self'; script-src 'self' https://cdnjs.cloudflare.com; style-src 'self' 'unsafe-inline' "
+# script-src 'self': the markdown parser and the sanitizer that cleans chain pages are served from web/vendor, so no
+# outside host can change the code that stands between a realm's text and the reader (2026-11-25).
+CSP = ("default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline' "
        "https://fonts.googleapis.com; font-src https://fonts.gstatic.com; img-src 'self'; connect-src 'self'; "
        "frame-ancestors 'none'; base-uri 'none'; form-action 'none'")
 # requests per second and burst, per visitor; crawlers getting 429 is by design
@@ -218,7 +222,9 @@ class Handler(BaseHTTPRequestHandler):
                     body = f.read()
                 if SITE and ctype.startswith("text/html"):
                     body = body.replace(b'content="/', b'content="' + SITE.encode() + b"/")
-                return self.send(200, body, ctype, "no-cache")
+                # a vendored library's name carries its version, so its content never changes: browsers keep it a year
+                keep = name.startswith("vendor/")
+                return self.send(200, body, ctype, "public, max-age=31536000, immutable" if keep else "no-cache")
             return self.send(404, {"error": "not found"})
         except Exception as e:
             return self.send(500, {"error": type(e).__name__})

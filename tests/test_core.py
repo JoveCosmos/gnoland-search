@@ -3,6 +3,7 @@ Run: python3 -m unittest discover -s tests"""
 import contextlib
 import io
 import os
+import re
 import tempfile
 import unittest
 
@@ -161,6 +162,19 @@ class Urls(unittest.TestCase):
         good = lambda u: bool(server.LIVE_URL.match(u) or server.INDEX_URL.match(u))
         self.assertTrue(all(good(u) for u in ok))
         self.assertEqual([u for u in bad if good(u)], ["gno.land/r/../../etc"])  # dots are path text to the node, never a file path
+
+
+class Scripts(unittest.TestCase):
+    def test_scripts_come_from_this_site(self):
+        # the policy allows scripts from this site only (2026-11-25): a tag naming a CDN, or a library upgrade
+        # that renames its file in one place and not the other, fails here instead of breaking the reader
+        from gnosearch import server
+        self.assertIn("script-src 'self';", server.CSP)
+        for page in ("index.html", "api.html"):
+            with open(os.path.join(server.WEB, page)) as f:
+                for src in re.findall(r'<script[^>]* src="([^"]*)"', f.read()):
+                    self.assertIn(src, server.STATIC, f"{page} loads {src}")
+                    self.assertTrue(os.path.exists(os.path.join(server.WEB, server.STATIC[src][0])), src)
 
 
 class Accounts(unittest.TestCase):

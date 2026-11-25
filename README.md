@@ -9,6 +9,7 @@ place, and there is a free open API. How it works and the rules that keep it cor
 ```
 gnosearch/     crawler, index, indexer reader, HTTP server (Python 3, standard library only)
 web/           the app (index.html, app.js), the API page (api.html), shared base.css and theme.js
+web/vendor/    marked and DOMPurify, unchanged copies under their own licenses
 tests/         unit tests (python3 -m unittest discover -s tests) and smoke.sh for a running site
 dev/shot.mjs   screenshots and a layout-shift check in headless Chrome
 mcp/           gno.land search as tools for AI agents (MCP): see mcp/README.md
@@ -42,3 +43,4 @@ running server. Agents such as Gnosh, and any other MCP client, can use it throu
 
 GNO Network General Public License, version 6 or later (a fork of the GNU AGPL 3): see LICENSE.md.
 If you run a modified version as a service, its users are entitled to its source.
+`web/vendor/` holds marked (MIT) and DOMPurify (Apache 2.0 or MPL 2.0), each under its own license, kept next to it.
